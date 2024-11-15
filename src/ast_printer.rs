@@ -1,8 +1,8 @@
-use crate::expr::{Binary, Expr, Grouping, Literal, Unary, Visitor};
+use crate::expr::{Binary, Expr, Grouping, Literal, Ternary, Unary, Visitor};
 use crate::token::LoxLiteral;
 
 pub struct AstPrinter {
-    output: String,
+    pub output: String,
 }
 impl AstPrinter {
     pub fn new() -> Self {
@@ -43,6 +43,10 @@ impl Visitor for AstPrinter {
     fn visit_unary_expr(&mut self, expr: &Unary) {
         self.parenthesize(&expr.operator.lexeme, vec![&expr.right]);
     }
+
+    fn visit_ternary_expr(&mut self, expr: &Ternary) {
+        self.parenthesize("ternary", vec![&expr.condition, &expr.left, &expr.right]);
+    }
 }
 
 #[cfg(test)]
@@ -66,5 +70,17 @@ mod test {
         );
         expr.accept(&mut ast_printer);
         assert_eq!(ast_printer.output, "(* (- 123) (group 45.67))".to_string());
+    }
+
+    #[test]
+    fn test_ast_print_ternary() {
+        let mut ast_printer = AstPrinter::new();
+        let expr = Ternary::new(
+            Box::new(Literal::new(LoxLiteral::Boolean(true))),
+            Box::new(Literal::new(LoxLiteral::Number(1.0))),
+            Box::new(Literal::new(LoxLiteral::Number(2.0))),
+        );
+        expr.accept(&mut ast_printer);
+        assert_eq!(ast_printer.output, "(ternary true 1 2)".to_string());
     }
 }

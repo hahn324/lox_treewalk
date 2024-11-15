@@ -1,19 +1,19 @@
 mod ast_printer;
 mod expr;
-mod expr_interpreter;
+mod parser;
 mod scanner;
 mod token;
 mod token_type;
 
+use crate::ast_printer::AstPrinter;
+use crate::parser::Parser;
 use crate::scanner::Scanner;
-use crate::token::Token;
 use std::fs;
 use std::io::{self, Write};
 
 pub fn run_file(file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let contents = fs::read_to_string(file_path)?;
-    let had_error = !run(&contents);
-    if had_error {
+    if !run(&contents) {
         std::process::exit(65);
     }
     Ok(())
@@ -42,20 +42,33 @@ pub fn run_prompt() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run(source: &str) -> bool {
-    let scanner = Scanner::new(source);
-    let tokens: Vec<Token> = scanner.scan_tokens();
+    let mut had_error = false;
+    let mut scanner = Scanner::new(source);
+    scanner.scan_tokens();
+    let tokens = match scanner.take() {
+        Ok(tokens) => tokens,
+        Err(tokens) => {
+            had_error = true;
+            tokens
+        }
+    };
+    let mut parser = Parser::new(tokens);
+    let parse_result = parser.parse();
 
-    for token in tokens {
-        println!("{:?}", token);
+    match parse_result {
+        Ok(expression) => {
+            let mut ast_printer = AstPrinter::new();
+            expression.accept(&mut ast_printer);
+            println!("{}", ast_printer.output);
+        }
+        Err(_) => {
+            had_error = true;
+        }
     }
-    true
+
+    !had_error
 }
 
-pub fn error(line: usize, message: &str) {
-    report(line, "", message);
-}
-
-fn report(line: usize, loc: &str, message: &str) {
+pub fn report(line: usize, loc: &str, message: &str) {
     eprintln!("[line {line} ] Error {loc}: {message}");
-    // TODO: Handle setting had_error
 }

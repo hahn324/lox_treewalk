@@ -1,4 +1,4 @@
-use crate::error;
+use crate::report;
 use crate::token::{LoxLiteral, Token};
 use crate::token_type::TokenType;
 use std::collections::HashMap;
@@ -6,8 +6,9 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 pub struct Scanner<'a> {
+    pub tokens: Vec<Token>,
+    pub had_error: bool,
     source: &'a str,
-    tokens: Vec<Token>,
     start: usize,
     current: usize,
     line: usize,
@@ -35,8 +36,9 @@ impl<'a> Scanner<'a> {
         keywords.insert(String::from("while"), TokenType::While);
 
         Scanner {
-            source,
             tokens: Vec::new(),
+            had_error: false,
+            source,
             start: 0,
             current: 0,
             line: 1,
@@ -44,7 +46,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_tokens(mut self) -> Vec<Token> {
+    pub fn scan_tokens(&mut self) {
         let mut char_iter: Peekable<Chars<'_>> = self.source.chars().peekable();
         while !self.is_at_end() {
             self.start = self.current;
@@ -53,7 +55,19 @@ impl<'a> Scanner<'a> {
 
         self.tokens
             .push(Token::new(TokenType::Eof, String::new(), None, self.line));
-        self.tokens
+    }
+
+    pub fn take(&mut self) -> Result<Vec<Token>, Vec<Token>> {
+        self.start = 0;
+        self.current = 0;
+        self.line = 1;
+        let tokens = std::mem::replace(&mut self.tokens, Vec::new());
+        if self.had_error {
+            self.had_error = false;
+            Err(tokens)
+        } else {
+            Ok(tokens)
+        }
     }
 
     fn is_at_end(&self) -> bool {
@@ -82,6 +96,8 @@ impl<'a> Scanner<'a> {
             '-' => self.add_token(TokenType::Minus, None),
             '+' => self.add_token(TokenType::Plus, None),
             ';' => self.add_token(TokenType::Semicolon, None),
+            ':' => self.add_token(TokenType::Colon, None),
+            '?' => self.add_token(TokenType::QuestionMark, None),
             '*' => self.add_token(TokenType::Star, None),
             '!' => match self.match_char(char_iter, '=') {
                 true => self.add_token(TokenType::BangEqual, None),
@@ -111,7 +127,7 @@ impl<'a> Scanner<'a> {
             '"' => self.string(char_iter),
             '0'..='9' => self.number(char_iter),
             _ if c.is_alphabetic() || c == '_' => self.identifier(char_iter),
-            _ => error(self.line, "Unexpected character."),
+            _ => self.error(self.line, "Unexpected character."),
         }
     }
 
@@ -142,7 +158,7 @@ impl<'a> Scanner<'a> {
             self.advance(char_iter);
         }
         if self.is_at_end() {
-            error(self.line, "Unterminated string.");
+            self.error(self.line, "Unterminated string.");
             return;
         }
 
@@ -207,7 +223,12 @@ impl<'a> Scanner<'a> {
             None => TokenType::Identifier,
         };
 
-        self.add_token(token_type, None);
+        match token_type {
+            TokenType::False => self.add_token(token_type, Some(LoxLiteral::Boolean(false))),
+            TokenType::True => self.add_token(token_type, Some(LoxLiteral::Boolean(true))),
+            TokenType::Nil => self.add_token(token_type, Some(LoxLiteral::Nil)),
+            _ => self.add_token(token_type, None),
+        }
     }
 
     fn comments(&mut self, char_iter: &mut Peekable<Chars<'_>>) {
@@ -241,5 +262,10 @@ impl<'a> Scanner<'a> {
             }
             current_char = self.advance(char_iter);
         }
+    }
+
+    fn error(&mut self, line: usize, message: &str) {
+        self.had_error = true;
+        report(line, "", message);
     }
 }

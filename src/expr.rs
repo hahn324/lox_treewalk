@@ -5,6 +5,7 @@ pub trait Visitor {
     fn visit_grouping_expr(&mut self, expr: &Grouping);
     fn visit_literal_expr(&mut self, expr: &Literal);
     fn visit_unary_expr(&mut self, expr: &Unary);
+    fn visit_ternary_expr(&mut self, expr: &Ternary);
 }
 
 pub trait Expr {
@@ -71,5 +72,25 @@ impl Unary {
 impl Expr for Unary {
     fn accept(&self, visitor: &mut dyn Visitor) {
         visitor.visit_unary_expr(self);
+    }
+}
+
+pub struct Ternary {
+    pub condition: Box<dyn Expr>,
+    pub left: Box<dyn Expr>,
+    pub right: Box<dyn Expr>,
+}
+impl Ternary {
+    pub fn new(condition: Box<dyn Expr>, left: Box<dyn Expr>, right: Box<dyn Expr>) -> Self {
+        Ternary {
+            condition,
+            left,
+            right,
+        }
+    }
+}
+impl Expr for Ternary {
+    fn accept(&self, visitor: &mut dyn Visitor) {
+        visitor.visit_ternary_expr(self);
     }
 }
