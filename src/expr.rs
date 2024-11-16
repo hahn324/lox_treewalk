@@ -1,15 +1,15 @@
 use crate::token::{LoxLiteral, Token};
 
-pub trait Visitor {
-    fn visit_binary_expr(&mut self, expr: &Binary);
-    fn visit_grouping_expr(&mut self, expr: &Grouping);
-    fn visit_literal_expr(&mut self, expr: &Literal);
-    fn visit_unary_expr(&mut self, expr: &Unary);
-    fn visit_ternary_expr(&mut self, expr: &Ternary);
+pub trait ExprVisitor {
+    fn visit_binary_expr(&mut self, expr: &Binary) -> LoxLiteral;
+    fn visit_grouping_expr(&mut self, expr: &Grouping) -> LoxLiteral;
+    fn visit_literal_expr(&mut self, expr: &Literal) -> LoxLiteral;
+    fn visit_unary_expr(&mut self, expr: &Unary) -> LoxLiteral;
+    fn visit_ternary_expr(&mut self, expr: &Ternary) -> LoxLiteral;
 }
 
 pub trait Expr {
-    fn accept(&self, visitor: &mut dyn Visitor);
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral;
 }
 
 pub struct Binary {
@@ -27,8 +27,8 @@ impl Binary {
     }
 }
 impl Expr for Binary {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_binary_expr(self);
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
+        visitor.visit_binary_expr(self)
     }
 }
 
@@ -41,8 +41,8 @@ impl Grouping {
     }
 }
 impl Expr for Grouping {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_grouping_expr(self);
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
+        visitor.visit_grouping_expr(self)
     }
 }
 
@@ -55,8 +55,8 @@ impl Literal {
     }
 }
 impl Expr for Literal {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_literal_expr(self);
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
+        visitor.visit_literal_expr(self)
     }
 }
 
@@ -70,8 +70,8 @@ impl Unary {
     }
 }
 impl Expr for Unary {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_unary_expr(self);
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
+        visitor.visit_unary_expr(self)
     }
 }
 
@@ -90,7 +90,7 @@ impl Ternary {
     }
 }
 impl Expr for Ternary {
-    fn accept(&self, visitor: &mut dyn Visitor) {
-        visitor.visit_ternary_expr(self);
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
+        visitor.visit_ternary_expr(self)
     }
 }

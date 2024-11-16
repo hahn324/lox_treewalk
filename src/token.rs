@@ -1,11 +1,22 @@
 use crate::token_type::TokenType;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LoxLiteral {
     Number(f64),
     String(String),
     Boolean(bool),
     Nil,
+}
+
+impl LoxLiteral {
+    pub fn stringify(&self) -> String {
+        match *self {
+            LoxLiteral::Number(val) => val.to_string(),
+            LoxLiteral::String(ref val) => val.clone(),
+            LoxLiteral::Boolean(val) => val.to_string(),
+            LoxLiteral::Nil => "nil".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

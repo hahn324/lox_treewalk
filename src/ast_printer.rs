@@ -1,51 +1,54 @@
-use crate::expr::{Binary, Expr, Grouping, Literal, Ternary, Unary, Visitor};
+use crate::expr::{Binary, Expr, ExprVisitor, Grouping, Literal, Ternary, Unary};
 use crate::token::LoxLiteral;
 
-pub struct AstPrinter {
-    pub output: String,
-}
+pub struct AstPrinter;
+
 impl AstPrinter {
     pub fn new() -> Self {
-        AstPrinter {
-            output: String::new(),
+        AstPrinter
+    }
+
+    pub fn print(&mut self, expression: &Box<dyn Expr>) -> String {
+        if let LoxLiteral::String(output) = expression.accept(self) {
+            output
+        } else {
+            String::from("")
         }
     }
 
-    fn parenthesize(&mut self, name: &str, exprs: Vec<&Box<dyn Expr>>) {
-        self.output.push('(');
-        self.output.push_str(name);
+    fn parenthesize(&mut self, name: &str, exprs: Vec<&Box<dyn Expr>>) -> LoxLiteral {
+        let mut output = String::new();
+        output.push('(');
+        output.push_str(name);
         for expr in exprs {
-            self.output.push(' ');
-            expr.accept(self);
+            output.push(' ');
+            if let LoxLiteral::String(val) = expr.accept(self) {
+                output.push_str(&val);
+            }
         }
-        self.output.push(')');
+        output.push(')');
+        LoxLiteral::String(output)
     }
 }
-impl Visitor for AstPrinter {
-    fn visit_binary_expr(&mut self, expr: &Binary) {
-        self.parenthesize(&expr.operator.lexeme, vec![&expr.left, &expr.right]);
+impl ExprVisitor for AstPrinter {
+    fn visit_binary_expr(&mut self, expr: &Binary) -> LoxLiteral {
+        self.parenthesize(&expr.operator.lexeme, vec![&expr.left, &expr.right])
     }
 
-    fn visit_grouping_expr(&mut self, expr: &Grouping) {
-        self.parenthesize("group", vec![&expr.expression]);
+    fn visit_grouping_expr(&mut self, expr: &Grouping) -> LoxLiteral {
+        self.parenthesize("group", vec![&expr.expression])
     }
 
-    fn visit_literal_expr(&mut self, expr: &Literal) {
-        let print_val = match expr.value {
-            LoxLiteral::Number(num) => &num.to_string(),
-            LoxLiteral::String(ref some_string) => some_string,
-            LoxLiteral::Boolean(val) => &val.to_string(),
-            LoxLiteral::Nil => "nil",
-        };
-        self.output.push_str(print_val);
+    fn visit_literal_expr(&mut self, expr: &Literal) -> LoxLiteral {
+        LoxLiteral::String(expr.value.stringify())
     }
 
-    fn visit_unary_expr(&mut self, expr: &Unary) {
-        self.parenthesize(&expr.operator.lexeme, vec![&expr.right]);
+    fn visit_unary_expr(&mut self, expr: &Unary) -> LoxLiteral {
+        self.parenthesize(&expr.operator.lexeme, vec![&expr.right])
     }
 
-    fn visit_ternary_expr(&mut self, expr: &Ternary) {
-        self.parenthesize("ternary", vec![&expr.condition, &expr.left, &expr.right]);
+    fn visit_ternary_expr(&mut self, expr: &Ternary) -> LoxLiteral {
+        self.parenthesize("ternary", vec![&expr.condition, &expr.left, &expr.right])
     }
 }
 
@@ -58,7 +61,7 @@ mod test {
     #[test]
     fn test_ast_printer_visitor() {
         let mut ast_printer = AstPrinter::new();
-        let expr = Binary::new(
+        let expr: Box<dyn Expr> = Box::new(Binary::new(
             Box::new(Unary::new(
                 Token::new(TokenType::Minus, String::from("-"), None, 1),
                 Box::new(Literal::new(LoxLiteral::Number(123.0))),
@@ -67,20 +70,18 @@ mod test {
             Box::new(Grouping::new(Box::new(Literal::new(LoxLiteral::Number(
                 45.67,
             ))))),
-        );
-        expr.accept(&mut ast_printer);
-        assert_eq!(ast_printer.output, "(* (- 123) (group 45.67))".to_string());
+        ));
+        assert_eq!(ast_printer.print(&expr), "(* (- 123) (group 45.67))");
     }
 
     #[test]
     fn test_ast_print_ternary() {
         let mut ast_printer = AstPrinter::new();
-        let expr = Ternary::new(
+        let expr: Box<dyn Expr> = Box::new(Ternary::new(
             Box::new(Literal::new(LoxLiteral::Boolean(true))),
             Box::new(Literal::new(LoxLiteral::Number(1.0))),
             Box::new(Literal::new(LoxLiteral::Number(2.0))),
-        );
-        expr.accept(&mut ast_printer);
-        assert_eq!(ast_printer.output, "(ternary true 1 2)".to_string());
+        ));
+        assert_eq!(ast_printer.print(&expr), "(ternary true 1 2)");
     }
 }
