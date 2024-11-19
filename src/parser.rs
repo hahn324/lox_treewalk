@@ -1,8 +1,9 @@
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
-use crate::expr::{Binary, Expr, Grouping, Literal, Ternary, Unary};
+use crate::expr::{Assign, Binary, Expr, Grouping, Literal, Ternary, Unary, Variable};
 use crate::report;
+use crate::stmt::{Block, Expression, Print, Stmt, Var};
 use crate::token::Token;
 use crate::token_type::TokenType;
 
@@ -11,17 +12,106 @@ pub struct LoxParseError;
 
 pub struct Parser {
     token_iter: Peekable<IntoIter<Token>>,
+    had_error: bool,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser {
             token_iter: tokens.into_iter().peekable(),
+            had_error: false,
         }
     }
 
-    pub fn parse(&mut self) -> Result<Box<dyn Expr>, LoxParseError> {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Box<dyn Stmt>>, LoxParseError> {
+        let mut statements = Vec::new();
+        while !self.is_at_end() {
+            if let Some(stmt) = self.declaration() {
+                statements.push(stmt);
+            }
+        }
+
+        match self.had_error {
+            true => Err(LoxParseError),
+            false => Ok(statements),
+        }
+    }
+
+    fn declaration(&mut self) -> Option<Box<dyn Stmt>> {
+        let res = match self.peek_token_type() {
+            TokenType::Var => {
+                // Consume the Var token.
+                self.advance();
+                self.var_declaration()
+            }
+            _ => self.statement(),
+        };
+        match res {
+            Ok(stmt) => Some(stmt),
+            Err(_) => {
+                self.had_error = true;
+                self.synchronize();
+                None
+            }
+        }
+    }
+
+    fn var_declaration(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
+        let name = self.consume(TokenType::Identifier, "Expect variable name.")?;
+
+        let mut initializer = None;
+        if self.check(&TokenType::Equal) {
+            // Consume the Equal token.
+            self.advance();
+            initializer = Some(self.expression()?);
+        }
+
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        )?;
+        Ok(Box::new(Var::new(name, initializer)))
+    }
+
+    fn statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
+        match self.peek_token_type() {
+            TokenType::Print => {
+                // Consume the Print token.
+                self.advance();
+                self.print_statement()
+            }
+            TokenType::LeftBrace => {
+                // Consume the LeftBrace token.
+                self.advance();
+                Ok(Box::new(Block::new(self.block()?)))
+            }
+            _ => self.expression_statement(),
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
+        let value = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
+        Ok(Box::new(Print::new(value)))
+    }
+
+    fn block(&mut self) -> Result<Vec<Box<dyn Stmt>>, LoxParseError> {
+        let mut statements = Vec::new();
+
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            if let Some(stmt) = self.declaration() {
+                statements.push(stmt);
+            }
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
+        Ok(statements)
+    }
+
+    fn expression_statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
+        Ok(Box::new(Expression::new(expr)))
     }
 
     fn expression(&mut self) -> Result<Box<dyn Expr>, LoxParseError> {
@@ -29,12 +119,36 @@ impl Parser {
     }
 
     fn comma(&mut self) -> Result<Box<dyn Expr>, LoxParseError> {
-        let mut expr = self.ternary()?;
+        let mut expr = self.assignment()?;
 
         let token_types = vec![TokenType::Comma];
         while let Some(operator) = self.match_token_type(&token_types) {
-            let right = self.ternary()?;
+            let right = self.assignment()?;
             expr = Box::new(Binary::new(expr, operator, right));
+        }
+
+        Ok(expr)
+    }
+
+    fn assignment(&mut self) -> Result<Box<dyn Expr>, LoxParseError> {
+        let expr = self.ternary()?;
+
+        if self.check(&TokenType::Equal) {
+            let equals = self.advance().unwrap();
+            let value = self.assignment()?;
+
+            match expr.get_assignment_target() {
+                Some(target) => {
+                    return Ok(Box::new(Assign::new(target.clone(), value)));
+                }
+                None => {
+                    report(
+                        equals.line,
+                        &format!("at '{}'", equals.lexeme),
+                        "Invalid assignment target.",
+                    );
+                }
+            }
         }
 
         Ok(expr)
@@ -43,7 +157,9 @@ impl Parser {
     fn ternary(&mut self) -> Result<Box<dyn Expr>, LoxParseError> {
         let mut expr = self.equality()?;
 
-        if let Some(_) = self.match_token_type(&vec![TokenType::QuestionMark]) {
+        if self.check(&TokenType::QuestionMark) {
+            // Consume the QuestionMark Token.
+            self.advance();
             let left = self.ternary()?;
             self.consume(
                 TokenType::Colon,
@@ -164,7 +280,13 @@ impl Parser {
             return Ok(Box::new(Literal::new(token.literal.unwrap())));
         }
 
-        if let Some(_) = self.match_token_type(&vec![TokenType::LeftParen]) {
+        if self.check(&TokenType::Identifier) {
+            return Ok(Box::new(Variable::new(self.advance().unwrap())));
+        }
+
+        if self.check(&TokenType::LeftParen) {
+            // Consume the LeftParen token.
+            self.advance();
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Expect ')' after expression")?;
             return Ok(Box::new(Grouping::new(expr)));

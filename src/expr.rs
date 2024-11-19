@@ -6,10 +6,15 @@ pub trait ExprVisitor {
     fn visit_literal_expr(&mut self, expr: &Literal) -> LoxLiteral;
     fn visit_unary_expr(&mut self, expr: &Unary) -> LoxLiteral;
     fn visit_ternary_expr(&mut self, expr: &Ternary) -> LoxLiteral;
+    fn visit_variable_expr(&mut self, expr: &Variable) -> LoxLiteral;
+    fn visit_assign_expr(&mut self, expr: &Assign) -> LoxLiteral;
 }
 
 pub trait Expr {
     fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral;
+    fn get_assignment_target(&self) -> Option<&Token> {
+        None
+    }
 }
 
 pub struct Binary {
@@ -92,5 +97,38 @@ impl Ternary {
 impl Expr for Ternary {
     fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
         visitor.visit_ternary_expr(self)
+    }
+}
+
+pub struct Variable {
+    pub name: Token,
+}
+impl Variable {
+    pub fn new(name: Token) -> Self {
+        Variable { name }
+    }
+}
+impl Expr for Variable {
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
+        visitor.visit_variable_expr(self)
+    }
+
+    fn get_assignment_target(&self) -> Option<&Token> {
+        Some(&self.name)
+    }
+}
+
+pub struct Assign {
+    pub name: Token,
+    pub value: Box<dyn Expr>,
+}
+impl Assign {
+    pub fn new(name: Token, value: Box<dyn Expr>) -> Self {
+        Assign { name, value }
+    }
+}
+impl Expr for Assign {
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
+        visitor.visit_assign_expr(self)
     }
 }

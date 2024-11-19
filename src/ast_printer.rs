@@ -1,8 +1,10 @@
-use crate::expr::{Binary, Expr, ExprVisitor, Grouping, Literal, Ternary, Unary};
+use crate::expr::{Assign, Binary, Expr, ExprVisitor, Grouping, Literal, Ternary, Unary};
+use crate::stmt::{Block, Expression, Print, StmtVisitor, Var};
 use crate::token::LoxLiteral;
 
 pub struct AstPrinter;
 
+#[allow(dead_code)]
 impl AstPrinter {
     pub fn new() -> Self {
         AstPrinter
@@ -30,6 +32,7 @@ impl AstPrinter {
         LoxLiteral::String(output)
     }
 }
+#[allow(unused_variables)]
 impl ExprVisitor for AstPrinter {
     fn visit_binary_expr(&mut self, expr: &Binary) -> LoxLiteral {
         self.parenthesize(&expr.operator.lexeme, vec![&expr.left, &expr.right])
@@ -49,6 +52,33 @@ impl ExprVisitor for AstPrinter {
 
     fn visit_ternary_expr(&mut self, expr: &Ternary) -> LoxLiteral {
         self.parenthesize("ternary", vec![&expr.condition, &expr.left, &expr.right])
+    }
+
+    fn visit_variable_expr(&mut self, expr: &crate::expr::Variable) -> LoxLiteral {
+        todo!();
+    }
+
+    fn visit_assign_expr(&mut self, expr: &Assign) -> LoxLiteral {
+        todo!();
+    }
+}
+
+#[allow(unused_variables)]
+impl StmtVisitor for AstPrinter {
+    fn visit_print_stmt(&mut self, stmt: &Print) {
+        todo!();
+    }
+
+    fn visit_expression_stmt(&mut self, stmt: &Expression) {
+        todo!();
+    }
+
+    fn visit_var_stmt(&mut self, stmt: &Var) {
+        todo!();
+    }
+
+    fn visit_block_stmt(&mut self, stmt: &Block) {
+        todo!();
     }
 }
 

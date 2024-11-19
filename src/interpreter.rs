@@ -1,24 +1,45 @@
-use crate::expr::{Binary, Expr, ExprVisitor, Grouping, Literal, Ternary, Unary};
+use crate::environment::Environment;
+use crate::expr::{Assign, Binary, Expr, ExprVisitor, Grouping, Literal, Ternary, Unary, Variable};
+use crate::stmt::{Block, Expression, Print, Stmt, StmtVisitor, Var};
 use crate::token::{LoxLiteral, Token};
 use crate::token_type::TokenType;
 
 pub struct Interpreter {
+    environment: Environment,
     pub had_runtime_error: bool,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
+            environment: Environment::new(),
             had_runtime_error: false,
         }
     }
 
-    pub fn interpret(&mut self, expr: &Box<dyn Expr>) {
-        let value = self.evaluate(expr);
-
-        if !self.had_runtime_error {
-            println!("{}", value.stringify());
+    pub fn interpret(&mut self, statements: Vec<Box<dyn Stmt>>) {
+        for statement in statements {
+            if self.had_runtime_error {
+                break;
+            }
+            self.execute(&statement);
         }
+    }
+
+    fn execute(&mut self, stmt: &Box<dyn Stmt>) {
+        stmt.accept(self);
+    }
+
+    fn execute_block(&mut self, statements: &Vec<Box<dyn Stmt>>) {
+        // Create new environment for block.
+        self.environment.create_environment();
+
+        for statement in statements {
+            self.execute(statement);
+        }
+
+        // Clenup environment for block.
+        self.environment.delete_environment();
     }
 
     fn evaluate(&mut self, expr: &Box<dyn Expr>) -> LoxLiteral {
@@ -153,5 +174,58 @@ impl ExprVisitor for Interpreter {
             true => self.evaluate(&expr.left),
             false => self.evaluate(&expr.right),
         }
+    }
+
+    fn visit_variable_expr(&mut self, expr: &Variable) -> LoxLiteral {
+        match self.environment.get(&expr.name) {
+            Some(val) => val.clone(),
+            None => self.set_runtime_error(
+                &expr.name,
+                &format!("Undefined variable '{}'.", &expr.name.lexeme),
+            ),
+        }
+    }
+
+    fn visit_assign_expr(&mut self, expr: &Assign) -> LoxLiteral {
+        let value = self.evaluate(&expr.value);
+        match self
+            .environment
+            .assign(expr.name.lexeme.clone(), value.clone())
+        {
+            Some(_) => value,
+            None => {
+                self.set_runtime_error(
+                    &expr.name,
+                    &format!("Undefined variable '{}'.", &expr.name.lexeme),
+                );
+                LoxLiteral::Nil
+            }
+        }
+    }
+}
+
+impl StmtVisitor for Interpreter {
+    fn visit_expression_stmt(&mut self, stmt: &Expression) {
+        self.evaluate(&stmt.expression);
+    }
+
+    fn visit_print_stmt(&mut self, stmt: &Print) {
+        let value = self.evaluate(&stmt.expression);
+        if !self.had_runtime_error {
+            println!("{}", value.stringify());
+        }
+    }
+
+    fn visit_var_stmt(&mut self, stmt: &Var) {
+        let value = match stmt.initializer {
+            Some(ref expr) => self.evaluate(expr),
+            None => LoxLiteral::Nil,
+        };
+
+        self.environment.define(stmt.name.lexeme.clone(), value);
+    }
+
+    fn visit_block_stmt(&mut self, stmt: &Block) {
+        self.execute_block(&stmt.statements)
     }
 }

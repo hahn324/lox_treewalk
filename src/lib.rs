@@ -1,8 +1,10 @@
 mod ast_printer;
+mod environment;
 mod expr;
 mod interpreter;
 mod parser;
 mod scanner;
+mod stmt;
 mod token;
 mod token_type;
 
@@ -60,7 +62,7 @@ fn run(source: &str, interpreter: &mut Interpreter) -> i32 {
     let parse_result = parser.parse();
 
     match parse_result {
-        Ok(expression) => interpreter.interpret(&expression),
+        Ok(statements) => interpreter.interpret(statements),
         Err(_) => {
             had_error = true;
         }
