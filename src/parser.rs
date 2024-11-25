@@ -1,10 +1,10 @@
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
-use crate::expr::{Assign, Binary, Expr, Grouping, Literal, Ternary, Unary, Variable};
+use crate::expr::{Assign, Binary, Expr, Grouping, Literal, Logical, Ternary, Unary, Variable};
 use crate::report;
-use crate::stmt::{Block, Expression, Print, Stmt, Var};
-use crate::token::Token;
+use crate::stmt::{Block, Break, Expression, If, Print, Stmt, Var, While};
+use crate::token::{LoxLiteral, Token};
 use crate::token_type::TokenType;
 
 #[derive(Debug)]
@@ -13,6 +13,7 @@ pub struct LoxParseError;
 pub struct Parser {
     token_iter: Peekable<IntoIter<Token>>,
     had_error: bool,
+    loop_level: u32,
 }
 
 impl Parser {
@@ -20,6 +21,7 @@ impl Parser {
         Parser {
             token_iter: tokens.into_iter().peekable(),
             had_error: false,
+            loop_level: 0,
         }
     }
 
@@ -74,19 +76,96 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
-        match self.peek_token_type() {
-            TokenType::Print => {
-                // Consume the Print token.
-                self.advance();
-                self.print_statement()
+        let token_types = vec![
+            TokenType::Print,
+            TokenType::LeftBrace,
+            TokenType::If,
+            TokenType::While,
+            TokenType::For,
+            TokenType::Break,
+        ];
+        if let Some(statement_token) = self.match_token_type(&token_types) {
+            match statement_token.token_type {
+                TokenType::Print => self.print_statement(),
+                TokenType::LeftBrace => Ok(Box::new(Block::new(self.block()?))),
+                TokenType::If => self.if_statement(),
+                TokenType::While => self.while_statement(),
+                TokenType::For => self.for_statement(),
+                TokenType::Break => self.break_statement(),
+                _ => unreachable!("Above match_token_type guarentees that no other token types are possible here."),
             }
-            TokenType::LeftBrace => {
-                // Consume the LeftBrace token.
-                self.advance();
-                Ok(Box::new(Block::new(self.block()?)))
-            }
-            _ => self.expression_statement(),
+        } else {
+            self.expression_statement()
         }
+    }
+
+    fn for_statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
+
+        let initializer_option = if self.check(&TokenType::Semicolon) {
+            // Consume Semicolon token.
+            self.advance();
+            None
+        } else if self.check(&TokenType::Var) {
+            // Consume Var token.
+            self.advance();
+            Some(self.var_declaration()?)
+        } else {
+            Some(self.expression_statement()?)
+        };
+
+        let condition = match self.check(&TokenType::Semicolon) {
+            true => Box::new(Literal::new(LoxLiteral::Boolean(true))),
+            false => self.expression()?,
+        };
+        self.consume(TokenType::Semicolon, "Expect ';' after loop condition.")?;
+
+        let increment_option = match self.check(&TokenType::RightParen) {
+            true => None,
+            false => Some(self.expression()?),
+        };
+        self.consume(TokenType::RightParen, "Expect ')' after for clauses.")?;
+
+        self.loop_level += 1;
+        let mut body = self.statement()?;
+        self.loop_level -= 1;
+
+        if let Some(increment) = increment_option {
+            body = Box::new(Block::new(vec![body, Box::new(Expression::new(increment))]));
+        }
+
+        body = Box::new(While::new(condition, body));
+
+        if let Some(initializer) = initializer_option {
+            body = Box::new(Block::new(vec![initializer, body]));
+        }
+
+        Ok(body)
+    }
+
+    fn while_statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after condition.")?;
+
+        self.loop_level += 1;
+        let body = self.statement()?;
+        self.loop_level -= 1;
+
+        Ok(Box::new(While::new(condition, body)))
+    }
+
+    fn break_statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
+        let stmt_end = self.consume(TokenType::Semicolon, "Expect ';' after 'break' statement.")?;
+        if self.loop_level == 0 {
+            report(
+                stmt_end.line,
+                "at 'break;'",
+                "A 'break;' cannot appear outside of any enclosing loop.",
+            );
+            self.had_error = true;
+        }
+        Ok(Box::new(Break))
     }
 
     fn print_statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
@@ -106,6 +185,23 @@ impl Parser {
 
         self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
         Ok(statements)
+    }
+
+    fn if_statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after 'if' condition.")?;
+
+        let then_branch = self.statement()?;
+        let else_branch = match self.check(&TokenType::Else) {
+            true => {
+                // Consume the Else token.
+                self.advance();
+                Some(self.statement()?)
+            }
+            false => None,
+        };
+        Ok(Box::new(If::new(condition, then_branch, else_branch)))
     }
 
     fn expression_statement(&mut self) -> Result<Box<dyn Stmt>, LoxParseError> {
@@ -155,7 +251,7 @@ impl Parser {
     }
 
     fn ternary(&mut self) -> Result<Box<dyn Expr>, LoxParseError> {
-        let mut expr = self.equality()?;
+        let mut expr = self.or()?;
 
         if self.check(&TokenType::QuestionMark) {
             // Consume the QuestionMark Token.
@@ -167,6 +263,30 @@ impl Parser {
             )?;
             let right = self.ternary()?;
             expr = Box::new(Ternary::new(expr, left, right));
+        }
+
+        Ok(expr)
+    }
+
+    fn or(&mut self) -> Result<Box<dyn Expr>, LoxParseError> {
+        let mut expr = self.and()?;
+
+        let token_types = vec![TokenType::Or];
+        while let Some(operator) = self.match_token_type(&token_types) {
+            let right = self.and()?;
+            expr = Box::new(Logical::new(expr, operator, right));
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Box<dyn Expr>, LoxParseError> {
+        let mut expr = self.equality()?;
+
+        let token_types = vec![TokenType::And];
+        while let Some(operator) = self.match_token_type(&token_types) {
+            let right = self.equality()?;
+            expr = Box::new(Logical::new(expr, operator, right));
         }
 
         Ok(expr)

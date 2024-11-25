@@ -1,5 +1,5 @@
-use crate::expr::{Assign, Binary, Expr, ExprVisitor, Grouping, Literal, Ternary, Unary};
-use crate::stmt::{Block, Expression, Print, StmtVisitor, Var};
+use crate::expr::{Assign, Binary, Expr, ExprVisitor, Grouping, Literal, Logical, Ternary, Unary};
+use crate::stmt::{Block, Expression, If, Print, StmtVisitor, Var, While};
 use crate::token::LoxLiteral;
 
 pub struct AstPrinter;
@@ -61,6 +61,10 @@ impl ExprVisitor for AstPrinter {
     fn visit_assign_expr(&mut self, expr: &Assign) -> LoxLiteral {
         todo!();
     }
+
+    fn visit_logical_expr(&mut self, expr: &Logical) -> LoxLiteral {
+        todo!();
+    }
 }
 
 #[allow(unused_variables)]
@@ -78,6 +82,18 @@ impl StmtVisitor for AstPrinter {
     }
 
     fn visit_block_stmt(&mut self, stmt: &Block) {
+        todo!();
+    }
+
+    fn visit_if_stmt(&mut self, stmt: &If) {
+        todo!();
+    }
+
+    fn visit_while_stmt(&mut self, stmt: &While) {
+        todo!();
+    }
+
+    fn visit_break_stmt(&mut self) {
         todo!();
     }
 }

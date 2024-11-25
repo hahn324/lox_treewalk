@@ -34,6 +34,7 @@ impl<'a> Scanner<'a> {
         keywords.insert(String::from("true"), TokenType::True);
         keywords.insert(String::from("var"), TokenType::Var);
         keywords.insert(String::from("while"), TokenType::While);
+        keywords.insert(String::from("break"), TokenType::Break);
 
         Scanner {
             tokens: Vec::new(),

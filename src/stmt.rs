@@ -6,6 +6,9 @@ pub trait StmtVisitor: ExprVisitor {
     fn visit_print_stmt(&mut self, stmt: &Print);
     fn visit_var_stmt(&mut self, stmt: &Var);
     fn visit_block_stmt(&mut self, stmt: &Block);
+    fn visit_if_stmt(&mut self, stmt: &If);
+    fn visit_while_stmt(&mut self, stmt: &While);
+    fn visit_break_stmt(&mut self);
 }
 
 pub trait Stmt {
@@ -66,5 +69,51 @@ impl Block {
 impl Stmt for Block {
     fn accept(&self, visitor: &mut dyn StmtVisitor) {
         visitor.visit_block_stmt(self);
+    }
+}
+
+pub struct If {
+    pub condition: Box<dyn Expr>,
+    pub then_branch: Box<dyn Stmt>,
+    pub else_branch: Option<Box<dyn Stmt>>,
+}
+impl If {
+    pub fn new(
+        condition: Box<dyn Expr>,
+        then_branch: Box<dyn Stmt>,
+        else_branch: Option<Box<dyn Stmt>>,
+    ) -> Self {
+        If {
+            condition,
+            then_branch,
+            else_branch,
+        }
+    }
+}
+impl Stmt for If {
+    fn accept(&self, visitor: &mut dyn StmtVisitor) {
+        visitor.visit_if_stmt(self);
+    }
+}
+
+pub struct While {
+    pub condition: Box<dyn Expr>,
+    pub body: Box<dyn Stmt>,
+}
+impl While {
+    pub fn new(condition: Box<dyn Expr>, body: Box<dyn Stmt>) -> Self {
+        While { condition, body }
+    }
+}
+impl Stmt for While {
+    fn accept(&self, visitor: &mut dyn StmtVisitor) {
+        visitor.visit_while_stmt(self);
+    }
+}
+
+pub struct Break;
+impl Stmt for Break {
+    fn accept(&self, visitor: &mut dyn StmtVisitor) {
+        visitor.visit_break_stmt();
     }
 }

@@ -1,12 +1,15 @@
 use crate::environment::Environment;
-use crate::expr::{Assign, Binary, Expr, ExprVisitor, Grouping, Literal, Ternary, Unary, Variable};
-use crate::stmt::{Block, Expression, Print, Stmt, StmtVisitor, Var};
+use crate::expr::{
+    Assign, Binary, Expr, ExprVisitor, Grouping, Literal, Logical, Ternary, Unary, Variable,
+};
+use crate::stmt::{Block, Expression, If, Print, Stmt, StmtVisitor, Var, While};
 use crate::token::{LoxLiteral, Token};
 use crate::token_type::TokenType;
 
 pub struct Interpreter {
     environment: Environment,
     pub had_runtime_error: bool,
+    active_break: bool,
 }
 
 impl Interpreter {
@@ -14,6 +17,7 @@ impl Interpreter {
         Interpreter {
             environment: Environment::new(),
             had_runtime_error: false,
+            active_break: false,
         }
     }
 
@@ -35,6 +39,9 @@ impl Interpreter {
         self.environment.create_environment();
 
         for statement in statements {
+            if self.active_break {
+                break;
+            }
             self.execute(statement);
         }
 
@@ -50,10 +57,10 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn is_truthy(&self, object: LoxLiteral) -> bool {
-        match object {
+    fn is_truthy(&self, object: &LoxLiteral) -> bool {
+        match &object {
             LoxLiteral::Nil => false,
-            LoxLiteral::Boolean(res) => res,
+            LoxLiteral::Boolean(res) => *res,
             _ => true,
         }
     }
@@ -163,14 +170,14 @@ impl ExprVisitor for Interpreter {
                 LoxLiteral::Number(val) => LoxLiteral::Number(-val),
                 _ => self.set_runtime_error(&expr.operator, "Operand must be a number."),
             },
-            TokenType::Bang => LoxLiteral::Boolean(!self.is_truthy(right)),
+            TokenType::Bang => LoxLiteral::Boolean(!self.is_truthy(&right)),
             _ => unreachable!("All valid Unary operators are accounted for in above arms."),
         }
     }
 
     fn visit_ternary_expr(&mut self, expr: &Ternary) -> LoxLiteral {
         let condition = self.evaluate(&expr.condition);
-        match self.is_truthy(condition) {
+        match self.is_truthy(&condition) {
             true => self.evaluate(&expr.left),
             false => self.evaluate(&expr.right),
         }
@@ -202,6 +209,16 @@ impl ExprVisitor for Interpreter {
             }
         }
     }
+
+    fn visit_logical_expr(&mut self, expr: &Logical) -> LoxLiteral {
+        let left = self.evaluate(&expr.left);
+
+        match expr.operator.token_type {
+            TokenType::Or if self.is_truthy(&left) => left,
+            TokenType::And if !self.is_truthy(&left) => left,
+            _ => self.evaluate(&expr.right),
+        }
+    }
 }
 
 impl StmtVisitor for Interpreter {
@@ -227,5 +244,32 @@ impl StmtVisitor for Interpreter {
 
     fn visit_block_stmt(&mut self, stmt: &Block) {
         self.execute_block(&stmt.statements)
+    }
+
+    fn visit_if_stmt(&mut self, stmt: &If) {
+        let condition_value = self.evaluate(&stmt.condition);
+        if self.is_truthy(&condition_value) {
+            self.execute(&stmt.then_branch);
+        } else if let Some(ref else_branch) = stmt.else_branch {
+            self.execute(else_branch);
+        }
+    }
+
+    fn visit_while_stmt(&mut self, stmt: &While) {
+        loop {
+            let condition_value = self.evaluate(&stmt.condition);
+            if !self.is_truthy(&condition_value) {
+                break;
+            }
+            self.execute(&stmt.body);
+            if self.active_break {
+                break;
+            }
+        }
+        self.active_break = false;
+    }
+
+    fn visit_break_stmt(&mut self) {
+        self.active_break = true;
     }
 }

@@ -8,10 +8,12 @@ pub trait ExprVisitor {
     fn visit_ternary_expr(&mut self, expr: &Ternary) -> LoxLiteral;
     fn visit_variable_expr(&mut self, expr: &Variable) -> LoxLiteral;
     fn visit_assign_expr(&mut self, expr: &Assign) -> LoxLiteral;
+    fn visit_logical_expr(&mut self, expr: &Logical) -> LoxLiteral;
 }
 
 pub trait Expr {
     fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral;
+
     fn get_assignment_target(&self) -> Option<&Token> {
         None
     }
@@ -130,5 +132,25 @@ impl Assign {
 impl Expr for Assign {
     fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
         visitor.visit_assign_expr(self)
+    }
+}
+
+pub struct Logical {
+    pub left: Box<dyn Expr>,
+    pub operator: Token,
+    pub right: Box<dyn Expr>,
+}
+impl Logical {
+    pub fn new(left: Box<dyn Expr>, operator: Token, right: Box<dyn Expr>) -> Self {
+        Logical {
+            left,
+            operator,
+            right,
+        }
+    }
+}
+impl Expr for Logical {
+    fn accept(&self, visitor: &mut dyn ExprVisitor) -> LoxLiteral {
+        visitor.visit_logical_expr(self)
     }
 }
