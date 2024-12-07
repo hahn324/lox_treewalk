@@ -1,8 +1,10 @@
-mod ast_printer;
 mod environment;
 mod expr;
 mod interpreter;
+mod lox_callable;
+mod lox_object;
 mod parser;
+mod runtime_error;
 mod scanner;
 mod stmt;
 mod token;
@@ -48,34 +50,25 @@ pub fn run_prompt() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run(source: &str, interpreter: &mut Interpreter) -> i32 {
-    let mut had_error = false;
     let mut scanner = Scanner::new(source);
     scanner.scan_tokens();
-    let tokens = match scanner.take() {
-        Ok(tokens) => tokens,
-        Err(tokens) => {
-            had_error = true;
-            tokens
-        }
-    };
-    let mut parser = Parser::new(tokens);
+
+    let mut parser = Parser::new(scanner.tokens);
     let parse_result = parser.parse();
 
-    match parse_result {
-        Ok(statements) => interpreter.interpret(statements),
-        Err(_) => {
-            had_error = true;
+    if parse_result.is_err() || scanner.had_error {
+        return 65;
+    }
+
+    match interpreter.interpret(parse_result.unwrap()) {
+        Ok(()) => (),
+        Err(error) => {
+            println!("{error}");
+            return 70;
         }
     }
 
-    if had_error {
-        65
-    } else if interpreter.had_runtime_error {
-        interpreter.had_runtime_error = false;
-        70
-    } else {
-        0
-    }
+    0
 }
 
 pub fn report(line: usize, loc: &str, message: &str) {

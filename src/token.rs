@@ -1,25 +1,8 @@
+use crate::lox_object::LoxLiteral;
 use crate::token_type::TokenType;
+use std::fmt;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum LoxLiteral {
-    Number(f64),
-    String(String),
-    Boolean(bool),
-    Nil,
-}
-
-impl LoxLiteral {
-    pub fn stringify(&self) -> String {
-        match *self {
-            LoxLiteral::Number(val) => val.to_string(),
-            LoxLiteral::String(ref val) => val.clone(),
-            LoxLiteral::Boolean(val) => val.to_string(),
-            LoxLiteral::Nil => "nil".to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
@@ -43,8 +26,12 @@ impl Token {
     }
 }
 
-impl ToString for Token {
-    fn to_string(&self) -> String {
-        format!("{:?} {} {:?}", self.token_type, self.lexeme, self.literal)
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:?} {} {:?}",
+            self.token_type, self.lexeme, self.literal
+        )
     }
 }

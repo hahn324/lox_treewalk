@@ -48,3 +48,9 @@ pub enum TokenType {
 
     Eof,
 }
+
+impl Default for TokenType {
+    fn default() -> Self {
+        TokenType::Nil
+    }
+}

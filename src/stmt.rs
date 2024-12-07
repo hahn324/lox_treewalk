@@ -1,88 +1,97 @@
-use crate::expr::{Expr, ExprVisitor};
+use crate::expr::Expr;
 use crate::token::Token;
 
-pub trait StmtVisitor: ExprVisitor {
-    fn visit_expression_stmt(&mut self, stmt: &Expression);
-    fn visit_print_stmt(&mut self, stmt: &Print);
-    fn visit_var_stmt(&mut self, stmt: &Var);
-    fn visit_block_stmt(&mut self, stmt: &Block);
-    fn visit_if_stmt(&mut self, stmt: &If);
-    fn visit_while_stmt(&mut self, stmt: &While);
-    fn visit_break_stmt(&mut self);
+pub trait StmtVisitor<T> {
+    fn visit_expression_stmt(&mut self, stmt: &Expression) -> T;
+    fn visit_print_stmt(&mut self, stmt: &Print) -> T;
+    fn visit_var_stmt(&mut self, stmt: &Var) -> T;
+    fn visit_block_stmt(&mut self, stmt: &Block) -> T;
+    fn visit_if_stmt(&mut self, stmt: &If) -> T;
+    fn visit_while_stmt(&mut self, stmt: &While) -> T;
+    fn visit_break_stmt(&mut self) -> T;
+    fn visit_function_stmt(&mut self, stmt: &Function) -> T;
+    fn visit_return_stmt(&mut self, stmt: &Return) -> T;
 }
 
-pub trait Stmt {
-    fn accept(&self, visitor: &mut dyn StmtVisitor);
+#[derive(Debug, Clone)]
+pub enum Stmt {
+    Expression(Expression),
+    Print(Print),
+    Var(Var),
+    Block(Block),
+    If(If),
+    While(While),
+    Break,
+    Function(Function),
+    Return(Return),
 }
 
+impl Stmt {
+    pub fn accept<T>(&self, visitor: &mut dyn StmtVisitor<T>) -> T {
+        match self {
+            Stmt::Expression(expression) => visitor.visit_expression_stmt(expression),
+            Stmt::Print(print) => visitor.visit_print_stmt(print),
+            Stmt::Var(var) => visitor.visit_var_stmt(var),
+            Stmt::Block(block) => visitor.visit_block_stmt(block),
+            Stmt::If(if_stmt) => visitor.visit_if_stmt(if_stmt),
+            Stmt::While(while_stmt) => visitor.visit_while_stmt(while_stmt),
+            Stmt::Break => visitor.visit_break_stmt(),
+            Stmt::Function(function) => visitor.visit_function_stmt(function),
+            Stmt::Return(return_stmt) => visitor.visit_return_stmt(return_stmt),
+        }
+    }
+}
+
+// Statement Types
+#[derive(Debug, Clone)]
 pub struct Expression {
-    pub expression: Box<dyn Expr>,
+    pub expression: Expr,
 }
 impl Expression {
-    pub fn new(expression: Box<dyn Expr>) -> Self {
+    pub fn new(expression: Expr) -> Self {
         Expression { expression }
     }
 }
-impl Stmt for Expression {
-    fn accept(&self, visitor: &mut dyn StmtVisitor) {
-        visitor.visit_expression_stmt(self);
-    }
-}
 
+#[derive(Debug, Clone)]
 pub struct Print {
-    pub expression: Box<dyn Expr>,
+    pub expression: Expr,
 }
 impl Print {
-    pub fn new(expression: Box<dyn Expr>) -> Self {
+    pub fn new(expression: Expr) -> Self {
         Print { expression }
     }
 }
-impl Stmt for Print {
-    fn accept(&self, visitor: &mut dyn StmtVisitor) {
-        visitor.visit_print_stmt(self);
-    }
-}
 
+#[derive(Debug, Clone)]
 pub struct Var {
     pub name: Token,
-    pub initializer: Option<Box<dyn Expr>>,
+    pub initializer: Option<Expr>,
 }
 impl Var {
-    pub fn new(name: Token, initializer: Option<Box<dyn Expr>>) -> Self {
+    pub fn new(name: Token, initializer: Option<Expr>) -> Self {
         Var { name, initializer }
     }
 }
-impl Stmt for Var {
-    fn accept(&self, visitor: &mut dyn StmtVisitor) {
-        visitor.visit_var_stmt(self);
-    }
-}
 
+#[derive(Debug, Clone)]
 pub struct Block {
-    pub statements: Vec<Box<dyn Stmt>>,
+    pub statements: Vec<Stmt>,
 }
 impl Block {
-    pub fn new(statements: Vec<Box<dyn Stmt>>) -> Self {
+    pub fn new(statements: Vec<Stmt>) -> Self {
         Block { statements }
     }
 }
-impl Stmt for Block {
-    fn accept(&self, visitor: &mut dyn StmtVisitor) {
-        visitor.visit_block_stmt(self);
-    }
-}
 
+#[derive(Debug, Clone)]
 pub struct If {
-    pub condition: Box<dyn Expr>,
-    pub then_branch: Box<dyn Stmt>,
-    pub else_branch: Option<Box<dyn Stmt>>,
+    pub condition: Expr,
+    pub then_branch: Box<Stmt>,
+    pub else_branch: Option<Box<Stmt>>,
 }
 impl If {
-    pub fn new(
-        condition: Box<dyn Expr>,
-        then_branch: Box<dyn Stmt>,
-        else_branch: Option<Box<dyn Stmt>>,
-    ) -> Self {
+    pub fn new(condition: Expr, then_branch: Box<Stmt>, else_branch: Option<Box<Stmt>>) -> Self {
         If {
             condition,
             then_branch,
@@ -90,30 +99,42 @@ impl If {
         }
     }
 }
-impl Stmt for If {
-    fn accept(&self, visitor: &mut dyn StmtVisitor) {
-        visitor.visit_if_stmt(self);
-    }
-}
 
+#[derive(Debug, Clone)]
 pub struct While {
-    pub condition: Box<dyn Expr>,
-    pub body: Box<dyn Stmt>,
+    pub condition: Expr,
+    pub body: Box<Stmt>,
 }
 impl While {
-    pub fn new(condition: Box<dyn Expr>, body: Box<dyn Stmt>) -> Self {
+    pub fn new(condition: Expr, body: Box<Stmt>) -> Self {
         While { condition, body }
     }
 }
-impl Stmt for While {
-    fn accept(&self, visitor: &mut dyn StmtVisitor) {
-        visitor.visit_while_stmt(self);
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
+}
+impl Function {
+    pub fn new(name: Token, params: Vec<Token>, body: Vec<Stmt>) -> Self {
+        Function { name, params, body }
+    }
+}
+impl PartialEq for Function {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
     }
 }
 
-pub struct Break;
-impl Stmt for Break {
-    fn accept(&self, visitor: &mut dyn StmtVisitor) {
-        visitor.visit_break_stmt();
+#[derive(Debug, Clone)]
+pub struct Return {
+    pub keyword: Token,
+    pub value: Expr,
+}
+impl Return {
+    pub fn new(keyword: Token, value: Expr) -> Self {
+        Return { keyword, value }
     }
 }

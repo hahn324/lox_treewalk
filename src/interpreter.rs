@@ -1,275 +1,372 @@
-use crate::environment::Environment;
 use crate::expr::{
-    Assign, Binary, Expr, ExprVisitor, Grouping, Literal, Logical, Ternary, Unary, Variable,
+    Assign, Binary, Call, Expr, ExprVisitor, Grouping, Literal, Logical, Ternary, Unary, Variable,
 };
-use crate::stmt::{Block, Expression, If, Print, Stmt, StmtVisitor, Var, While};
-use crate::token::{LoxLiteral, Token};
-use crate::token_type::TokenType;
+use crate::stmt::{Block, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While};
+use crate::{
+    environment::Environment,
+    lox_callable::LoxCallable,
+    lox_object::{LoxLiteral, LoxObject},
+    runtime_error::RuntimeError,
+    token_type::TokenType,
+};
+use std::{cell::RefCell, mem, rc::Rc, time::SystemTime};
 
 pub struct Interpreter {
-    environment: Environment,
-    pub had_runtime_error: bool,
+    pub globals: Rc<RefCell<Environment>>,
+    pub environment: Rc<RefCell<Environment>>,
     active_break: bool,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
+        let globals = Rc::new(RefCell::new(Environment::new(None)));
+        // Implement global "clock" function.
+        let clock_function = |_: &mut Interpreter, _: Vec<LoxObject>| {
+            LoxObject::Literal(LoxLiteral::Number(
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("SystemTime should be after UNIX EPOCH in global clock function.")
+                    .as_secs_f64(),
+            ))
+        };
+        let global_clock = LoxObject::Callable(LoxCallable::new_native_fun(
+            0,
+            clock_function,
+            String::from("<native fn>"),
+        ));
+
+        globals
+            .borrow_mut()
+            .define(String::from("clock"), global_clock);
+
+        let environment = Rc::clone(&globals);
+
         Interpreter {
-            environment: Environment::new(),
-            had_runtime_error: false,
+            globals,
+            environment,
             active_break: false,
         }
     }
 
-    pub fn interpret(&mut self, statements: Vec<Box<dyn Stmt>>) {
-        for statement in statements {
-            if self.had_runtime_error {
-                break;
-            }
-            self.execute(&statement);
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<(), RuntimeError> {
+        for statement in statements.iter() {
+            self.execute(statement)?;
         }
+        Ok(())
     }
 
-    fn execute(&mut self, stmt: &Box<dyn Stmt>) {
-        stmt.accept(self);
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        stmt.accept(self)
     }
 
-    fn execute_block(&mut self, statements: &Vec<Box<dyn Stmt>>) {
-        // Create new environment for block.
-        self.environment.create_environment();
+    pub fn execute_block(
+        &mut self,
+        statements: &Vec<Stmt>,
+        mut environment: Rc<RefCell<Environment>>,
+    ) -> Result<(), RuntimeError> {
+        mem::swap(&mut self.environment, &mut environment);
 
         for statement in statements {
             if self.active_break {
                 break;
             }
-            self.execute(statement);
+            self.execute(statement)?;
         }
 
-        // Clenup environment for block.
-        self.environment.delete_environment();
+        mem::swap(&mut self.environment, &mut environment);
+        Ok(())
     }
 
-    fn evaluate(&mut self, expr: &Box<dyn Expr>) -> LoxLiteral {
-        if self.had_runtime_error {
-            return LoxLiteral::Nil;
-        }
-
+    fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject, RuntimeError> {
         expr.accept(self)
     }
 
-    fn is_truthy(&self, object: &LoxLiteral) -> bool {
+    fn is_truthy(&self, object: &LoxObject) -> bool {
         match &object {
-            LoxLiteral::Nil => false,
-            LoxLiteral::Boolean(res) => *res,
+            LoxObject::Literal(LoxLiteral::Nil) => false,
+            LoxObject::Literal(LoxLiteral::Boolean(res)) => *res,
             _ => true,
         }
     }
-
-    fn set_runtime_error(&mut self, token: &Token, message: &str) -> LoxLiteral {
-        self.had_runtime_error = true;
-        eprintln!("[line {}] {}", token.line, message);
-        LoxLiteral::Nil
-    }
 }
 
-impl ExprVisitor for Interpreter {
-    fn visit_binary_expr(&mut self, expr: &Binary) -> LoxLiteral {
-        let left = self.evaluate(&expr.left);
-        let right = self.evaluate(&expr.right);
+impl ExprVisitor<Result<LoxObject, RuntimeError>> for Interpreter {
+    fn visit_binary_expr(&mut self, expr: &Binary) -> Result<LoxObject, RuntimeError> {
+        let left = self.evaluate(&expr.left)?;
+        let right = self.evaluate(&expr.right)?;
 
-        if self.had_runtime_error {
-            return LoxLiteral::Nil;
-        }
         match expr.operator.token_type {
             TokenType::Minus => match (left, right) {
-                (LoxLiteral::Number(left_val), LoxLiteral::Number(right_val)) => {
-                    LoxLiteral::Number(left_val - right_val)
-                }
-                _ => self.set_runtime_error(&expr.operator, "Operands must be numbers."),
+                (
+                    LoxObject::Literal(LoxLiteral::Number(left_val)),
+                    LoxObject::Literal(LoxLiteral::Number(right_val)),
+                ) => Ok(LoxObject::Literal(LoxLiteral::Number(left_val - right_val))),
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operands must be numbers."),
+                )),
             },
             TokenType::Slash => match (left, right) {
-                (LoxLiteral::Number(left_val), LoxLiteral::Number(right_val)) => {
-                    match right_val == 0.0 {
-                        true => self.set_runtime_error(&expr.operator, "Cannot divide by zero."),
-                        false => LoxLiteral::Number(left_val / right_val),
-                    }
-                }
-                _ => self.set_runtime_error(&expr.operator, "Operands must be numbers."),
+                (
+                    LoxObject::Literal(LoxLiteral::Number(left_val)),
+                    LoxObject::Literal(LoxLiteral::Number(right_val)),
+                ) => match right_val == 0.0 {
+                    true => Err(RuntimeError::new(
+                        expr.operator.line,
+                        String::from("Cannot divide by zero."),
+                    )),
+                    false => Ok(LoxObject::Literal(LoxLiteral::Number(left_val / right_val))),
+                },
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operands must be numbers."),
+                )),
             },
             TokenType::Star => match (left, right) {
-                (LoxLiteral::Number(left_val), LoxLiteral::Number(right_val)) => {
-                    LoxLiteral::Number(left_val * right_val)
-                }
-                _ => self.set_runtime_error(&expr.operator, "Operands must be numbers."),
+                (
+                    LoxObject::Literal(LoxLiteral::Number(left_val)),
+                    LoxObject::Literal(LoxLiteral::Number(right_val)),
+                ) => Ok(LoxObject::Literal(LoxLiteral::Number(left_val * right_val))),
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operands must be numbers."),
+                )),
             },
             TokenType::Plus => match (left, right) {
-                (LoxLiteral::Number(left_val), LoxLiteral::Number(right_val)) => {
-                    LoxLiteral::Number(left_val + right_val)
-                }
-                (LoxLiteral::String(left_val), LoxLiteral::String(right_val)) => {
-                    LoxLiteral::String(format!("{left_val}{right_val}"))
-                }
-                (LoxLiteral::String(left_val), right) => {
-                    LoxLiteral::String(format!("{left_val}{}", right.stringify()))
-                }
-                (left, LoxLiteral::String(right_val)) => {
-                    LoxLiteral::String(format!("{}{right_val}", left.stringify()))
-                }
-                _ => self.set_runtime_error(
-                    &expr.operator,
-                    "Operands must be two numbers or one must be a string.",
+                (
+                    LoxObject::Literal(LoxLiteral::Number(left_val)),
+                    LoxObject::Literal(LoxLiteral::Number(right_val)),
+                ) => Ok(LoxObject::Literal(LoxLiteral::Number(left_val + right_val))),
+                (
+                    LoxObject::Literal(LoxLiteral::String(left_val)),
+                    LoxObject::Literal(LoxLiteral::String(right_val)),
+                ) => Ok(LoxObject::Literal(LoxLiteral::String(format!(
+                    "{left_val}{right_val}"
+                )))),
+                (LoxObject::Literal(LoxLiteral::String(left_val)), right) => Ok(
+                    LoxObject::Literal(LoxLiteral::String(format!("{left_val}{right}",))),
                 ),
+                (left, LoxObject::Literal(LoxLiteral::String(right_val))) => Ok(
+                    LoxObject::Literal(LoxLiteral::String(format!("{left}{right_val}",))),
+                ),
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operands must be two numbers or one must be a string."),
+                )),
             },
             TokenType::Greater => match (left, right) {
-                (LoxLiteral::Number(left_val), LoxLiteral::Number(right_val)) => {
-                    LoxLiteral::Boolean(left_val > right_val)
-                }
-                _ => self.set_runtime_error(&expr.operator, "Operands must be numbers."),
+                (
+                    LoxObject::Literal(LoxLiteral::Number(left_val)),
+                    LoxObject::Literal(LoxLiteral::Number(right_val)),
+                ) => Ok(LoxObject::Literal(LoxLiteral::Boolean(
+                    left_val > right_val,
+                ))),
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operands must be numbers."),
+                )),
             },
             TokenType::GreaterEqual => match (left, right) {
-                (LoxLiteral::Number(left_val), LoxLiteral::Number(right_val)) => {
-                    LoxLiteral::Boolean(left_val >= right_val)
-                }
-                _ => self.set_runtime_error(&expr.operator, "Operands must be numbers."),
+                (
+                    LoxObject::Literal(LoxLiteral::Number(left_val)),
+                    LoxObject::Literal(LoxLiteral::Number(right_val)),
+                ) => Ok(LoxObject::Literal(LoxLiteral::Boolean(
+                    left_val >= right_val,
+                ))),
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operands must be numbers."),
+                )),
             },
             TokenType::Less => match (left, right) {
-                (LoxLiteral::Number(left_val), LoxLiteral::Number(right_val)) => {
-                    LoxLiteral::Boolean(left_val < right_val)
-                }
-                _ => self.set_runtime_error(&expr.operator, "Operands must be numbers."),
+                (
+                    LoxObject::Literal(LoxLiteral::Number(left_val)),
+                    LoxObject::Literal(LoxLiteral::Number(right_val)),
+                ) => Ok(LoxObject::Literal(LoxLiteral::Boolean(
+                    left_val < right_val,
+                ))),
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operands must be numbers."),
+                )),
             },
             TokenType::LessEqual => match (left, right) {
-                (LoxLiteral::Number(left_val), LoxLiteral::Number(right_val)) => {
-                    LoxLiteral::Boolean(left_val <= right_val)
-                }
-                _ => self.set_runtime_error(&expr.operator, "Operands must be numbers."),
+                (
+                    LoxObject::Literal(LoxLiteral::Number(left_val)),
+                    LoxObject::Literal(LoxLiteral::Number(right_val)),
+                ) => Ok(LoxObject::Literal(LoxLiteral::Boolean(
+                    left_val <= right_val,
+                ))),
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operands must be numbers."),
+                )),
             },
-            TokenType::BangEqual => LoxLiteral::Boolean(left != right),
-            TokenType::EqualEqual => LoxLiteral::Boolean(left == right),
-            TokenType::Comma => right,
+            TokenType::BangEqual => Ok(LoxObject::Literal(LoxLiteral::Boolean(left != right))),
+            TokenType::EqualEqual => Ok(LoxObject::Literal(LoxLiteral::Boolean(left == right))),
+            TokenType::Comma => Ok(right),
             _ => unreachable!("All valid Binary operators are accounted for in above arms."),
         }
     }
 
-    fn visit_grouping_expr(&mut self, expr: &Grouping) -> LoxLiteral {
+    fn visit_grouping_expr(&mut self, expr: &Grouping) -> Result<LoxObject, RuntimeError> {
         self.evaluate(&expr.expression)
     }
 
-    fn visit_literal_expr(&mut self, expr: &Literal) -> LoxLiteral {
-        expr.value.clone()
+    fn visit_literal_expr(&mut self, expr: &Literal) -> Result<LoxObject, RuntimeError> {
+        Ok(LoxObject::Literal(expr.value.clone()))
     }
 
-    fn visit_unary_expr(&mut self, expr: &Unary) -> LoxLiteral {
-        let right = self.evaluate(&expr.right);
+    fn visit_unary_expr(&mut self, expr: &Unary) -> Result<LoxObject, RuntimeError> {
+        let right = self.evaluate(&expr.right)?;
 
-        if self.had_runtime_error {
-            return LoxLiteral::Nil;
-        }
         match expr.operator.token_type {
             TokenType::Minus => match right {
-                LoxLiteral::Number(val) => LoxLiteral::Number(-val),
-                _ => self.set_runtime_error(&expr.operator, "Operand must be a number."),
+                LoxObject::Literal(LoxLiteral::Number(val)) => {
+                    Ok(LoxObject::Literal(LoxLiteral::Number(-val)))
+                }
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    String::from("Operand must be a number."),
+                )),
             },
-            TokenType::Bang => LoxLiteral::Boolean(!self.is_truthy(&right)),
+            TokenType::Bang => Ok(LoxObject::Literal(LoxLiteral::Boolean(
+                !self.is_truthy(&right),
+            ))),
             _ => unreachable!("All valid Unary operators are accounted for in above arms."),
         }
     }
 
-    fn visit_ternary_expr(&mut self, expr: &Ternary) -> LoxLiteral {
-        let condition = self.evaluate(&expr.condition);
+    fn visit_ternary_expr(&mut self, expr: &Ternary) -> Result<LoxObject, RuntimeError> {
+        let condition = self.evaluate(&expr.condition)?;
         match self.is_truthy(&condition) {
             true => self.evaluate(&expr.left),
             false => self.evaluate(&expr.right),
         }
     }
 
-    fn visit_variable_expr(&mut self, expr: &Variable) -> LoxLiteral {
-        match self.environment.get(&expr.name) {
-            Some(val) => val.clone(),
-            None => self.set_runtime_error(
-                &expr.name,
-                &format!("Undefined variable '{}'.", &expr.name.lexeme),
-            ),
-        }
+    fn visit_variable_expr(&mut self, expr: &Variable) -> Result<LoxObject, RuntimeError> {
+        self.environment.borrow().get(&expr.name)
     }
 
-    fn visit_assign_expr(&mut self, expr: &Assign) -> LoxLiteral {
-        let value = self.evaluate(&expr.value);
-        match self
-            .environment
-            .assign(expr.name.lexeme.clone(), value.clone())
-        {
-            Some(_) => value,
-            None => {
-                self.set_runtime_error(
-                    &expr.name,
-                    &format!("Undefined variable '{}'.", &expr.name.lexeme),
-                );
-                LoxLiteral::Nil
-            }
-        }
+    fn visit_assign_expr(&mut self, expr: &Assign) -> Result<LoxObject, RuntimeError> {
+        let value = self.evaluate(&expr.value)?;
+        self.environment.borrow_mut().assign(&expr.name, value)
     }
 
-    fn visit_logical_expr(&mut self, expr: &Logical) -> LoxLiteral {
-        let left = self.evaluate(&expr.left);
+    fn visit_logical_expr(&mut self, expr: &Logical) -> Result<LoxObject, RuntimeError> {
+        let left = self.evaluate(&expr.left)?;
 
         match expr.operator.token_type {
-            TokenType::Or if self.is_truthy(&left) => left,
-            TokenType::And if !self.is_truthy(&left) => left,
+            TokenType::Or if self.is_truthy(&left) => Ok(left),
+            TokenType::And if !self.is_truthy(&left) => Ok(left),
             _ => self.evaluate(&expr.right),
+        }
+    }
+
+    fn visit_call_expr(&mut self, expr: &Call) -> Result<LoxObject, RuntimeError> {
+        let callee = self.evaluate(&expr.callee)?;
+
+        let mut arguments = Vec::new();
+        for argument in expr.arguments.iter() {
+            arguments.push(self.evaluate(argument)?);
+        }
+
+        match callee {
+            LoxObject::Callable(function) => {
+                if arguments.len() != function.arity() {
+                    return Err(RuntimeError::new(
+                        expr.paren.line,
+                        format!(
+                            "Expected {} arguments but got {}.",
+                            function.arity(),
+                            arguments.len()
+                        ),
+                    ));
+                }
+                function.call(self, arguments)
+            }
+            _ => Err(RuntimeError::new(
+                expr.paren.line,
+                String::from("Can only call functions and classes."),
+            )),
         }
     }
 }
 
-impl StmtVisitor for Interpreter {
-    fn visit_expression_stmt(&mut self, stmt: &Expression) {
-        self.evaluate(&stmt.expression);
+impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
+    fn visit_expression_stmt(&mut self, stmt: &Expression) -> Result<(), RuntimeError> {
+        self.evaluate(&stmt.expression)?;
+        Ok(())
     }
 
-    fn visit_print_stmt(&mut self, stmt: &Print) {
-        let value = self.evaluate(&stmt.expression);
-        if !self.had_runtime_error {
-            println!("{}", value.stringify());
-        }
+    fn visit_print_stmt(&mut self, stmt: &Print) -> Result<(), RuntimeError> {
+        let value = self.evaluate(&stmt.expression)?;
+        println!("{value}");
+        Ok(())
     }
 
-    fn visit_var_stmt(&mut self, stmt: &Var) {
+    fn visit_var_stmt(&mut self, stmt: &Var) -> Result<(), RuntimeError> {
         let value = match stmt.initializer {
-            Some(ref expr) => self.evaluate(expr),
-            None => LoxLiteral::Nil,
+            Some(ref expr) => self.evaluate(expr)?,
+            None => LoxObject::Literal(LoxLiteral::Nil),
         };
 
-        self.environment.define(stmt.name.lexeme.clone(), value);
+        self.environment
+            .borrow_mut()
+            .define(stmt.name.lexeme.clone(), value);
+        Ok(())
     }
 
-    fn visit_block_stmt(&mut self, stmt: &Block) {
-        self.execute_block(&stmt.statements)
+    fn visit_block_stmt(&mut self, stmt: &Block) -> Result<(), RuntimeError> {
+        let environment = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
+            &self.environment,
+        )))));
+        self.execute_block(&stmt.statements, environment)
     }
 
-    fn visit_if_stmt(&mut self, stmt: &If) {
-        let condition_value = self.evaluate(&stmt.condition);
+    fn visit_if_stmt(&mut self, stmt: &If) -> Result<(), RuntimeError> {
+        let condition_value = self.evaluate(&stmt.condition)?;
+
         if self.is_truthy(&condition_value) {
-            self.execute(&stmt.then_branch);
+            self.execute(&stmt.then_branch)?;
         } else if let Some(ref else_branch) = stmt.else_branch {
-            self.execute(else_branch);
+            self.execute(else_branch)?;
         }
+
+        Ok(())
     }
 
-    fn visit_while_stmt(&mut self, stmt: &While) {
+    fn visit_while_stmt(&mut self, stmt: &While) -> Result<(), RuntimeError> {
         loop {
-            let condition_value = self.evaluate(&stmt.condition);
+            let condition_value = self.evaluate(&stmt.condition)?;
             if !self.is_truthy(&condition_value) {
                 break;
             }
-            self.execute(&stmt.body);
+            self.execute(&stmt.body)?;
             if self.active_break {
                 break;
             }
         }
         self.active_break = false;
+        Ok(())
     }
 
-    fn visit_break_stmt(&mut self) {
+    fn visit_break_stmt(&mut self) -> Result<(), RuntimeError> {
         self.active_break = true;
+        Ok(())
+    }
+
+    fn visit_function_stmt(&mut self, stmt: &Function) -> Result<(), RuntimeError> {
+        let function_name = stmt.name.lexeme.clone();
+        let function = LoxCallable::new_lox_fun(stmt);
+        self.environment
+            .borrow_mut()
+            .define(function_name, LoxObject::Callable(function));
+        Ok(())
+    }
+
+    fn visit_return_stmt(&mut self, stmt: &Return) -> Result<(), RuntimeError> {
+        todo!();
     }
 }
