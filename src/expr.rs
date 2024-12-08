@@ -1,5 +1,4 @@
-use crate::lox_object::LoxLiteral;
-use crate::token::Token;
+use crate::{lox_object::LoxLiteral, stmt::Stmt, token::Token};
 
 pub trait ExprVisitor<T> {
     fn visit_binary_expr(&mut self, expr: &Binary) -> T;
@@ -11,6 +10,7 @@ pub trait ExprVisitor<T> {
     fn visit_assign_expr(&mut self, expr: &Assign) -> T;
     fn visit_logical_expr(&mut self, expr: &Logical) -> T;
     fn visit_call_expr(&mut self, expr: &Call) -> T;
+    fn visit_closure_expr(&mut self, expr: &Closure) -> T;
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +24,7 @@ pub enum Expr {
     Assign(Assign),
     Logical(Logical),
     Call(Call),
+    Closure(Closure),
 }
 
 impl Expr {
@@ -38,6 +39,7 @@ impl Expr {
             Expr::Assign(assign) => visitor.visit_assign_expr(assign),
             Expr::Logical(logical) => visitor.visit_logical_expr(logical),
             Expr::Call(call) => visitor.visit_call_expr(call),
+            Expr::Closure(closure) => visitor.visit_closure_expr(closure),
         }
     }
 }
@@ -156,5 +158,21 @@ impl Call {
             paren,
             arguments,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Closure {
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
+}
+impl Closure {
+    pub fn new(params: Vec<Token>, body: Vec<Stmt>) -> Self {
+        Closure { params, body }
+    }
+}
+impl PartialEq for Closure {
+    fn eq(&self, _: &Self) -> bool {
+        false
     }
 }

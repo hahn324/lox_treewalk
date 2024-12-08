@@ -1,5 +1,7 @@
-use crate::expr::Expr;
-use crate::token::Token;
+use crate::{
+    expr::{Closure, Expr},
+    token::Token,
+};
 
 pub trait StmtVisitor<T> {
     fn visit_expression_stmt(&mut self, stmt: &Expression) -> T;
@@ -114,12 +116,11 @@ impl While {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: Token,
-    pub params: Vec<Token>,
-    pub body: Vec<Stmt>,
+    pub closure: Closure,
 }
 impl Function {
-    pub fn new(name: Token, params: Vec<Token>, body: Vec<Stmt>) -> Self {
-        Function { name, params, body }
+    pub fn new(name: Token, closure: Closure) -> Self {
+        Function { name, closure }
     }
 }
 impl PartialEq for Function {

@@ -1,5 +1,6 @@
 use crate::expr::{
-    Assign, Binary, Call, Expr, ExprVisitor, Grouping, Literal, Logical, Ternary, Unary, Variable,
+    Assign, Binary, Call, Closure, Expr, ExprVisitor, Grouping, Literal, Logical, Ternary, Unary,
+    Variable,
 };
 use crate::stmt::{Block, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While};
 use crate::{
@@ -298,6 +299,11 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
                 String::from("Can only call functions and classes."),
             ))),
         }
+    }
+
+    fn visit_closure_expr(&mut self, expr: &Closure) -> Result<LoxObject, LoxException> {
+        let closure = LoxCallable::new_lox_closure(expr, Rc::clone(&self.environment));
+        Ok(LoxObject::Callable(closure))
     }
 }
 

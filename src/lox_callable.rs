@@ -1,5 +1,6 @@
 use crate::{
     environment::Environment,
+    expr::Closure,
     interpreter::Interpreter,
     lox_exception::LoxException,
     lox_object::{LoxLiteral, LoxObject},
@@ -11,8 +12,8 @@ use std::{cell::RefCell, fmt, rc::Rc};
 pub enum FunDeclaration {
     NativeFunction(fn(&mut Interpreter, Vec<LoxObject>) -> LoxObject),
     LoxFunction {
-        declaration: Function,
-        closure: Rc<RefCell<Environment>>,
+        declaration: Closure,
+        context: Rc<RefCell<Environment>>,
     },
 }
 
@@ -36,14 +37,27 @@ impl LoxCallable {
         }
     }
 
-    pub fn new_lox_fun(declaration: &Function, closure: Rc<RefCell<Environment>>) -> Self {
-        let arity = declaration.params.len();
+    pub fn new_lox_fun(declaration: &Function, context: Rc<RefCell<Environment>>) -> Self {
+        let arity = declaration.closure.params.len();
         let repr = format!("<fn {}>", declaration.name.lexeme);
         LoxCallable {
             arity,
             function: FunDeclaration::LoxFunction {
+                declaration: declaration.closure.clone(),
+                context,
+            },
+            repr,
+        }
+    }
+
+    pub fn new_lox_closure(declaration: &Closure, context: Rc<RefCell<Environment>>) -> Self {
+        let arity = declaration.params.len();
+        let repr = String::from("<fn>");
+        LoxCallable {
+            arity,
+            function: FunDeclaration::LoxFunction {
                 declaration: declaration.clone(),
-                closure,
+                context,
             },
             repr,
         }
@@ -58,10 +72,10 @@ impl LoxCallable {
             FunDeclaration::NativeFunction(function) => Ok(function(interpreter, arguments)),
             FunDeclaration::LoxFunction {
                 declaration,
-                closure,
+                context,
             } => {
                 let environment =
-                    Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&closure)))));
+                    Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&context)))));
                 for (idx, value) in arguments.into_iter().enumerate() {
                     environment
                         .borrow_mut()

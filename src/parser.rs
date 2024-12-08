@@ -1,5 +1,5 @@
 use crate::expr::{
-    Assign, Binary, Call, Expr, Grouping, Literal, Logical, Ternary, Unary, Variable,
+    Assign, Binary, Call, Closure, Expr, Grouping, Literal, Logical, Ternary, Unary, Variable,
 };
 use crate::stmt::{Block, Expression, Function, If, Print, Return, Stmt, Var, While};
 use crate::{lox_object::LoxLiteral, report, token::Token, token_type::TokenType};
@@ -47,7 +47,10 @@ impl Parser {
             TokenType::Fun => {
                 // Consume the Fun token.
                 self.advance();
-                self.function("function")
+                match self.check(&TokenType::Identifier) {
+                    true => self.function("function"),
+                    false => self.closure_statement(),
+                }
             }
             _ => self.statement(),
         };
@@ -80,17 +83,22 @@ impl Parser {
 
     fn function(&mut self, kind: &str) -> Result<Stmt, LoxParseError> {
         let name = self.consume(TokenType::Identifier, &format!("Expect {kind} name."))?;
+        let closure = self.closure(kind)?;
 
+        Ok(Stmt::Function(Function::new(name, closure)))
+    }
+
+    fn closure(&mut self, kind: &str) -> Result<Closure, LoxParseError> {
         self.consume(
             TokenType::LeftParen,
-            &format!("Expect '(' after {kind} name."),
+            &format!("Expect '(' after {kind} start."),
         )?;
-        let mut parameters = Vec::new();
+        let mut params = Vec::new();
         if !self.check(&TokenType::RightParen) {
-            parameters.push(self.consume(TokenType::Identifier, "Expect parameter name.")?);
+            params.push(self.consume(TokenType::Identifier, "Expect parameter name.")?);
             while self.check(&TokenType::Comma) {
                 let comma_token = self.advance().unwrap();
-                if parameters.len() >= 255 {
+                if params.len() >= 255 {
                     report(
                         comma_token.line,
                         &format!("at '{}'", comma_token.lexeme),
@@ -98,7 +106,7 @@ impl Parser {
                     );
                     self.had_error = true;
                 }
-                parameters.push(self.consume(TokenType::Identifier, "Expect parameter name.")?);
+                params.push(self.consume(TokenType::Identifier, "Expect parameter name.")?);
             }
         }
         self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
@@ -110,7 +118,7 @@ impl Parser {
 
         let body = self.block()?;
 
-        Ok(Stmt::Function(Function::new(name, parameters, body)))
+        Ok(Closure::new(params, body))
     }
 
     fn statement(&mut self) -> Result<Stmt, LoxParseError> {
@@ -262,6 +270,12 @@ impl Parser {
         Ok(Stmt::Expression(Expression::new(expr)))
     }
 
+    fn closure_statement(&mut self) -> Result<Stmt, LoxParseError> {
+        let closure = Expr::Closure(self.closure("closure")?);
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
+        Ok(Stmt::Expression(Expression::new(closure)))
+    }
+
     fn expression(&mut self) -> Result<Expr, LoxParseError> {
         self.comma()
     }
@@ -279,7 +293,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<Expr, LoxParseError> {
-        let mut expr = self.ternary()?;
+        let mut expr = self.closure_expression()?;
 
         if self.check(&TokenType::Equal) {
             let equals = self.advance().unwrap();
@@ -297,6 +311,16 @@ impl Parser {
         }
 
         Ok(expr)
+    }
+
+    fn closure_expression(&mut self) -> Result<Expr, LoxParseError> {
+        if self.check(&TokenType::Fun) {
+            // Consume the Fun token
+            self.advance();
+            Ok(Expr::Closure(self.closure("closure")?))
+        } else {
+            self.ternary()
+        }
     }
 
     fn ternary(&mut self) -> Result<Expr, LoxParseError> {
