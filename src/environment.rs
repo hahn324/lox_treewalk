@@ -1,6 +1,11 @@
-use crate::{lox_object::LoxObject, runtime_error::RuntimeError, token::Token};
+use crate::{
+    lox_exception::{LoxException, RuntimeError},
+    lox_object::LoxObject,
+    token::Token,
+};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+#[derive(Debug, PartialEq)]
 pub struct Environment {
     values: HashMap<String, LoxObject>,
     enclosing: Option<Rc<RefCell<Environment>>>,
@@ -18,20 +23,20 @@ impl Environment {
         self.values.insert(name, value);
     }
 
-    pub fn get(&self, name: &Token) -> Result<LoxObject, RuntimeError> {
+    pub fn get(&self, name: &Token) -> Result<LoxObject, LoxException> {
         match self.values.contains_key(&name.lexeme) {
             true => Ok(self.values.get(&name.lexeme).unwrap().clone()),
             false if self.enclosing.is_some() => {
                 self.enclosing.as_deref().unwrap().borrow().get(name)
             }
-            false => Err(RuntimeError::new(
+            false => Err(LoxException::RuntimeError(RuntimeError::new(
                 name.line,
                 format!("Undefined variable '{}'.", &name.lexeme),
-            )),
+            ))),
         }
     }
 
-    pub fn assign(&mut self, name: &Token, value: LoxObject) -> Result<LoxObject, RuntimeError> {
+    pub fn assign(&mut self, name: &Token, value: LoxObject) -> Result<LoxObject, LoxException> {
         match self.values.contains_key(&name.lexeme) {
             true => {
                 self.values.insert(name.lexeme.clone(), value.clone());
@@ -44,10 +49,10 @@ impl Environment {
                     .assign(name, value.clone())?;
             }
             false => {
-                return Err(RuntimeError::new(
+                return Err(LoxException::RuntimeError(RuntimeError::new(
                     name.line,
                     format!("Undefined variable '{}'.", &name.lexeme),
-                ))
+                )))
             }
         }
         Ok(value)

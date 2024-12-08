@@ -1,8 +1,8 @@
 use crate::{
     environment::Environment,
     interpreter::Interpreter,
+    lox_exception::LoxException,
     lox_object::{LoxLiteral, LoxObject},
-    runtime_error::RuntimeError,
     stmt::Function,
 };
 use std::{cell::RefCell, fmt, rc::Rc};
@@ -10,7 +10,10 @@ use std::{cell::RefCell, fmt, rc::Rc};
 #[derive(Debug, Clone, PartialEq)]
 pub enum FunDeclaration {
     NativeFunction(fn(&mut Interpreter, Vec<LoxObject>) -> LoxObject),
-    LoxFunction(Function),
+    LoxFunction {
+        declaration: Function,
+        closure: Rc<RefCell<Environment>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -33,12 +36,15 @@ impl LoxCallable {
         }
     }
 
-    pub fn new_lox_fun(declaration: &Function) -> Self {
+    pub fn new_lox_fun(declaration: &Function, closure: Rc<RefCell<Environment>>) -> Self {
         let arity = declaration.params.len();
         let repr = format!("<fn {}>", declaration.name.lexeme);
         LoxCallable {
             arity,
-            function: FunDeclaration::LoxFunction(declaration.clone()),
+            function: FunDeclaration::LoxFunction {
+                declaration: declaration.clone(),
+                closure,
+            },
             repr,
         }
     }
@@ -47,21 +53,28 @@ impl LoxCallable {
         &self,
         interpreter: &mut Interpreter,
         arguments: Vec<LoxObject>,
-    ) -> Result<LoxObject, RuntimeError> {
+    ) -> Result<LoxObject, LoxException> {
         match &self.function {
             FunDeclaration::NativeFunction(function) => Ok(function(interpreter, arguments)),
-            FunDeclaration::LoxFunction(declaration) => {
-                let environment = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
-                    &interpreter.globals,
-                )))));
+            FunDeclaration::LoxFunction {
+                declaration,
+                closure,
+            } => {
+                let environment =
+                    Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&closure)))));
                 for (idx, value) in arguments.into_iter().enumerate() {
                     environment
                         .borrow_mut()
                         .define(declaration.params[idx].lexeme.clone(), value);
                 }
 
-                interpreter.execute_block(&declaration.body, environment)?;
-                Ok(LoxObject::Literal(LoxLiteral::Nil))
+                match interpreter.execute_block(&declaration.body, environment) {
+                    Ok(_) => Ok(LoxObject::Literal(LoxLiteral::Nil)),
+                    Err(exception) => match exception {
+                        LoxException::RuntimeError(_) => Err(exception),
+                        LoxException::Return(value) => Ok(value),
+                    },
+                }
             }
         }
     }
