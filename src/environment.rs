@@ -36,6 +36,30 @@ impl Environment {
         }
     }
 
+    pub fn get_at(&self, distance: usize, name: &str) -> LoxObject {
+        let expect_msg = "Expect to find variable due to semantic analysis in Resolver.";
+        if distance == 0 {
+            self.values.get(name).expect(expect_msg).clone()
+        } else {
+            self.ancestor(distance)
+                .borrow()
+                .values
+                .get(name)
+                .expect(expect_msg)
+                .clone()
+        }
+    }
+
+    fn ancestor(&self, distance: usize) -> Rc<RefCell<Environment>> {
+        let expect_msg = "Expect number of enclosing environments to match value from Resolver.";
+        let mut environment = Rc::clone(self.enclosing.as_ref().expect(expect_msg));
+        for _ in 1..distance {
+            let enclosing = Rc::clone(environment.borrow().enclosing.as_ref().expect(expect_msg));
+            environment = enclosing;
+        }
+        environment
+    }
+
     pub fn assign(&mut self, name: &Token, value: LoxObject) -> Result<LoxObject, LoxException> {
         match self.values.contains_key(&name.lexeme) {
             true => {
@@ -56,5 +80,17 @@ impl Environment {
             }
         }
         Ok(value)
+    }
+
+    pub fn assign_at(&mut self, distance: usize, name: &Token, value: LoxObject) -> LoxObject {
+        if distance == 0 {
+            self.values.insert(name.lexeme.clone(), value.clone());
+        } else {
+            self.ancestor(distance)
+                .borrow_mut()
+                .values
+                .insert(name.lexeme.clone(), value.clone());
+        }
+        value
     }
 }

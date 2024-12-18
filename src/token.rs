@@ -1,8 +1,11 @@
 use crate::lox_object::LoxLiteral;
 use crate::token_type::TokenType;
-use std::fmt;
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+};
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
@@ -33,5 +36,23 @@ impl fmt::Display for Token {
             "{:?} {} {:?}",
             self.token_type, self.lexeme, self.literal
         )
+    }
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.token_type == other.token_type
+            && self.lexeme == other.lexeme
+            && self.line == other.line
+    }
+}
+
+impl Eq for Token {}
+
+impl Hash for Token {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.token_type.hash(state);
+        self.lexeme.hash(state);
+        self.line.hash(state);
     }
 }

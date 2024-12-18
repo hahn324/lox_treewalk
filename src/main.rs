@@ -1,4 +1,6 @@
-use lox_treewalk::{interpreter::Interpreter, parser::Parser, scanner::Scanner};
+use lox_treewalk::{
+    interpreter::Interpreter, parser::Parser, resolver::Resolver, scanner::Scanner,
+};
 use std::{
     env,
     error::Error,
@@ -64,8 +66,15 @@ fn run(source: &str, interpreter: &mut Interpreter) -> i32 {
     if parse_result.is_err() || scanner.had_error {
         return 65;
     }
+    let statements = parse_result.unwrap();
 
-    match interpreter.interpret(parse_result.unwrap()) {
+    let mut resolver = Resolver::new(interpreter);
+    resolver.resolve_statements(&statements);
+    if resolver.had_error {
+        return 65;
+    }
+
+    match interpreter.interpret(&statements) {
         Ok(()) => (),
         Err(error) => {
             println!("{error}");

@@ -5,6 +5,7 @@ mod lox_callable;
 mod lox_exception;
 mod lox_object;
 pub mod parser;
+pub mod resolver;
 pub mod scanner;
 mod stmt;
 mod token;

@@ -23,6 +23,11 @@ impl Parser {
         }
     }
 
+    fn parse_error(&mut self, line: usize, loc: &str, message: &str) {
+        self.had_error = true;
+        report(line, loc, message);
+    }
+
     pub fn parse(&mut self) -> Result<Vec<Stmt>, LoxParseError> {
         let mut statements = Vec::new();
         while !self.is_at_end() {
@@ -99,12 +104,11 @@ impl Parser {
             while self.check(&TokenType::Comma) {
                 let comma_token = self.advance().unwrap();
                 if params.len() >= 255 {
-                    report(
+                    self.parse_error(
                         comma_token.line,
                         &format!("at '{}'", comma_token.lexeme),
                         "Can't have more than 255 parameters",
                     );
-                    self.had_error = true;
                 }
                 params.push(self.consume(TokenType::Identifier, "Expect parameter name.")?);
             }
@@ -209,12 +213,11 @@ impl Parser {
     fn break_statement(&mut self) -> Result<Stmt, LoxParseError> {
         let stmt_end = self.consume(TokenType::Semicolon, "Expect ';' after 'break' statement.")?;
         if self.loop_level == 0 {
-            report(
+            self.parse_error(
                 stmt_end.line,
                 "at 'break;'",
                 "A 'break;' cannot appear outside of any enclosing loop.",
             );
-            self.had_error = true;
         }
         Ok(Stmt::Break)
     }
@@ -302,7 +305,7 @@ impl Parser {
                     let value = Box::new(self.assignment()?);
                     expr = Expr::Assign(Assign::new(variable.name, value));
                 }
-                _ => report(
+                _ => self.parse_error(
                     equals.line,
                     &format!("at '{}'", equals.lexeme),
                     "Invalid assignment target.",
@@ -441,7 +444,7 @@ impl Parser {
                 TokenType::Slash | TokenType::Star => self.unary(),
                 _ => unreachable!("Above match_token_type guarentees that no other token types are possible here."),
             };
-            report(
+            self.parse_error(
                 operator.line,
                 &format!("at '{}'", operator.lexeme),
                 "Invalid use of binary operator, must be preceded by an expression.",
@@ -485,12 +488,11 @@ impl Parser {
             while self.check(&TokenType::Comma) {
                 let comma_token = self.advance().unwrap();
                 if arguments.len() >= 255 {
-                    report(
+                    self.parse_error(
                         comma_token.line,
                         &format!("at '{}'", comma_token.lexeme),
                         "Can't have more than 255 arguments",
                     );
-                    self.had_error = true;
                 }
                 arguments.push(self.assignment()?);
             }
@@ -527,9 +529,11 @@ impl Parser {
 
         // Will always be Some variant from peek since we never consume the last Eof token.
         let next_token = self.token_iter.peek().unwrap();
-        report(
-            next_token.line,
-            &format!("at '{}'", next_token.lexeme),
+        let next_token_line = next_token.line;
+        let next_token_lexeme = next_token.lexeme.clone();
+        self.parse_error(
+            next_token_line,
+            &format!("at '{}'", next_token_lexeme),
             "Failed to match a valid expression.",
         );
         Err(LoxParseError)
@@ -542,11 +546,13 @@ impl Parser {
             false => {
                 // Will always be Some variant from peek since we never consume the last Eof token.
                 let next_token = self.token_iter.peek().unwrap();
+                let next_token_line = next_token.line;
+                let next_token_lexeme = next_token.lexeme.clone();
                 match next_token.token_type {
-                    TokenType::Eof => report(next_token.line, " at end", message),
-                    _ => report(
-                        next_token.line,
-                        &format!("at '{}'", next_token.lexeme),
+                    TokenType::Eof => self.parse_error(next_token_line, " at end", message),
+                    _ => self.parse_error(
+                        next_token_line,
+                        &format!("at '{}'", next_token_lexeme),
                         message,
                     ),
                 }

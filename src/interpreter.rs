@@ -8,13 +8,15 @@ use crate::{
     lox_callable::LoxCallable,
     lox_exception::{LoxException, RuntimeError},
     lox_object::{LoxLiteral, LoxObject},
+    token::Token,
     token_type::TokenType,
 };
-use std::{cell::RefCell, rc::Rc, time::SystemTime};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, time::SystemTime};
 
 pub struct Interpreter {
     pub globals: Rc<RefCell<Environment>>,
     pub environment: Rc<RefCell<Environment>>,
+    locals: HashMap<Token, usize>,
     active_break: bool,
 }
 
@@ -45,12 +47,13 @@ impl Interpreter {
         Interpreter {
             globals,
             environment,
+            locals: HashMap::new(),
             active_break: false,
         }
     }
 
-    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<(), LoxException> {
-        for statement in statements.iter() {
+    pub fn interpret(&mut self, statements: &Vec<Stmt>) -> Result<(), LoxException> {
+        for statement in statements {
             self.execute(statement)?;
         }
         Ok(())
@@ -58,6 +61,10 @@ impl Interpreter {
 
     fn execute(&mut self, stmt: &Stmt) -> Result<(), LoxException> {
         stmt.accept(self)
+    }
+
+    pub fn resolve(&mut self, token: Token, depth: usize) {
+        self.locals.insert(token, depth);
     }
 
     pub fn execute_block(
@@ -94,6 +101,13 @@ impl Interpreter {
             LoxObject::Literal(LoxLiteral::Nil) => false,
             LoxObject::Literal(LoxLiteral::Boolean(res)) => *res,
             _ => true,
+        }
+    }
+
+    fn look_up_variable(&mut self, name: &Token) -> Result<LoxObject, LoxException> {
+        match self.locals.get(name) {
+            Some(&distance) => Ok(self.environment.borrow().get_at(distance, &name.lexeme)),
+            None => self.globals.borrow().get(name),
         }
     }
 }
@@ -254,12 +268,18 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
     }
 
     fn visit_variable_expr(&mut self, expr: &Variable) -> Result<LoxObject, LoxException> {
-        self.environment.borrow().get(&expr.name)
+        self.look_up_variable(&expr.name)
     }
 
     fn visit_assign_expr(&mut self, expr: &Assign) -> Result<LoxObject, LoxException> {
         let value = self.evaluate(&expr.value)?;
-        self.environment.borrow_mut().assign(&expr.name, value)
+        match self.locals.get(&expr.name) {
+            Some(&distance) => Ok(self
+                .environment
+                .borrow_mut()
+                .assign_at(distance, &expr.name, value)),
+            None => self.globals.borrow_mut().assign(&expr.name, value),
+        }
     }
 
     fn visit_logical_expr(&mut self, expr: &Logical) -> Result<LoxObject, LoxException> {
