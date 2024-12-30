@@ -1,16 +1,27 @@
 use crate::{
-    interpreter::Interpreter, lox_callable::LoxCallable, lox_exception::LoxException,
-    lox_instance::LoxInstance, lox_object::LoxObject,
+    interpreter::Interpreter,
+    lox_callable::{Callable, LoxCallable},
+    lox_exception::LoxException,
+    lox_instance::LoxInstance,
+    lox_object::LoxObject,
 };
-use std::{cell::RefCell, fmt, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LoxClass {
     pub name: String,
+    pub methods: HashMap<String, Rc<Callable>>,
 }
 impl LoxClass {
-    pub fn new(name: String) -> Self {
-        LoxClass { name }
+    pub fn new(name: String, methods: HashMap<String, Rc<Callable>>) -> Self {
+        LoxClass { name, methods }
+    }
+
+    pub fn find_method(&self, name: &str) -> Option<Rc<Callable>> {
+        match self.methods.get(name) {
+            Some(method) => Some(Rc::clone(method)),
+            None => None,
+        }
     }
 }
 

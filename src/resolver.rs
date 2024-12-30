@@ -14,6 +14,7 @@ use std::collections::HashMap;
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 pub struct Resolver<'interpreter> {
@@ -242,5 +243,11 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
     fn visit_class_stmt(&mut self, stmt: &Class) {
         self.declare(&stmt.name);
         self.define(&stmt.name);
+
+        for method in stmt.methods.iter() {
+            if let Stmt::Function(function) = method {
+                self.resolve_function(&function.closure, FunctionType::Method);
+            }
+        }
     }
 }

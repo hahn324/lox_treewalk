@@ -442,7 +442,22 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
         self.environment
             .borrow_mut()
             .define(class_name.clone(), LoxObject::Literal(LoxLiteral::Nil));
-        let klass = LoxClass::new(class_name);
+
+        let mut methods = HashMap::new();
+        for method in stmt.methods.iter() {
+            if let Stmt::Function(function) = method {
+                let method_name = function.name.lexeme.clone();
+                let lox_fun = LoxFunction::new(
+                    &function.closure,
+                    Rc::clone(&self.environment),
+                    Some(method_name.clone()),
+                );
+                methods.insert(method_name, Rc::new(Callable::Function(lox_fun)));
+            }
+        }
+
+        let klass = LoxClass::new(class_name, methods);
+
         self.environment.borrow_mut().assign(
             &stmt.name,
             LoxObject::Callable(Rc::new(Callable::Class(klass))),
