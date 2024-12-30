@@ -15,6 +15,7 @@ pub struct Scanner<'a> {
     current: usize,
     line: usize,
     keywords: HashMap<&'static str, TokenType>,
+    next_token_id: usize,
 }
 
 impl<'a> Scanner<'a> {
@@ -49,6 +50,7 @@ impl<'a> Scanner<'a> {
             current: 0,
             line: 1,
             keywords,
+            next_token_id: 0,
         }
     }
 
@@ -58,8 +60,14 @@ impl<'a> Scanner<'a> {
             self.scan_token();
         }
 
-        self.tokens
-            .push(Token::new(TokenType::Eof, String::new(), None, self.line));
+        self.tokens.push(Token::new(
+            TokenType::Eof,
+            String::new(),
+            None,
+            self.line,
+            self.next_token_id,
+        ));
+        self.next_token_id += 1;
     }
 
     fn is_at_end(&self) -> bool {
@@ -125,8 +133,14 @@ impl<'a> Scanner<'a> {
 
     fn add_token(&mut self, token_type: TokenType, literal: Option<LoxLiteral>) {
         let text = String::from(&self.source[self.start..self.current]);
-        self.tokens
-            .push(Token::new(token_type, text, literal, self.line));
+        self.tokens.push(Token::new(
+            token_type,
+            text,
+            literal,
+            self.line,
+            self.next_token_id,
+        ));
+        self.next_token_id += 1;
     }
 
     fn match_char(&mut self, expected: char) -> bool {

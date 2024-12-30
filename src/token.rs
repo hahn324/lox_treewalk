@@ -11,6 +11,7 @@ pub struct Token {
     pub lexeme: String,
     pub literal: Option<LoxLiteral>,
     pub line: usize,
+    token_id: usize,
 }
 
 impl Token {
@@ -19,12 +20,14 @@ impl Token {
         lexeme: String,
         literal: Option<LoxLiteral>,
         line: usize,
+        token_id: usize,
     ) -> Self {
         Token {
             token_type,
             lexeme,
             literal,
             line,
+            token_id,
         }
     }
 }
@@ -41,9 +44,7 @@ impl fmt::Display for Token {
 
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
-        self.token_type == other.token_type
-            && self.lexeme == other.lexeme
-            && self.line == other.line
+        self.token_id == other.token_id
     }
 }
 
@@ -51,8 +52,6 @@ impl Eq for Token {}
 
 impl Hash for Token {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.token_type.hash(state);
-        self.lexeme.hash(state);
-        self.line.hash(state);
+        self.token_id.hash(state);
     }
 }

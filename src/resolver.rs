@@ -1,8 +1,10 @@
 use crate::expr::{
-    Assign, Binary, Call, Closure, Expr, ExprVisitor, Grouping, Literal, Logical, Ternary, Unary,
-    Variable,
+    Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
+    Ternary, Unary, Variable,
 };
-use crate::stmt::{Block, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While};
+use crate::stmt::{
+    Block, Class, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While,
+};
 use crate::{interpreter::Interpreter, report, token::Token};
 use std::collections::HashMap;
 
@@ -165,6 +167,15 @@ impl<'interpreter> ExprVisitor<()> for Resolver<'interpreter> {
         }
     }
 
+    fn visit_get_expr(&mut self, expr: &Get) {
+        self.resolve_expr(&expr.object);
+    }
+
+    fn visit_set_expr(&mut self, expr: &Set) -> () {
+        self.resolve_expr(&expr.value);
+        self.resolve_expr(&expr.object);
+    }
+
     fn visit_closure_expr(&mut self, expr: &Closure) {
         self.resolve_function(expr, FunctionType::Function);
     }
@@ -224,5 +235,10 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
             );
         }
         self.resolve_expr(&stmt.value);
+    }
+
+    fn visit_class_stmt(&mut self, stmt: &Class) {
+        self.declare(&stmt.name);
+        self.define(&stmt.name);
     }
 }

@@ -1,13 +1,18 @@
 use crate::expr::{
-    Assign, Binary, Call, Closure, Expr, ExprVisitor, Grouping, Literal, Logical, Ternary, Unary,
-    Variable,
+    Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
+    Ternary, Unary, Variable,
 };
-use crate::stmt::{Block, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While};
+use crate::stmt::{
+    Block, Class, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While,
+};
 use crate::{
     environment::Environment,
-    lox_callable::LoxCallable,
+    lox_callable::{Callable, LoxCallable},
+    lox_class::LoxClass,
     lox_exception::{LoxException, RuntimeError},
+    lox_function::LoxFunction,
     lox_object::{LoxLiteral, LoxObject},
+    native_function::NativeFunction,
     token::Token,
     token_type::TokenType,
 };
@@ -32,11 +37,11 @@ impl Interpreter {
                     .as_secs_f64(),
             ))
         };
-        let global_clock = LoxObject::Callable(LoxCallable::new_native_fun(
-            0,
+        let global_clock = LoxObject::Callable(Callable::NativeFun(NativeFunction::new(
             clock_function,
+            0,
             String::from("<native fn>"),
-        ));
+        )));
 
         globals
             .borrow_mut()
@@ -301,18 +306,18 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
 
         match callee {
-            LoxObject::Callable(function) => {
-                if arguments.len() != function.arity() {
+            LoxObject::Callable(callable) => {
+                if arguments.len() != callable.arity() {
                     return Err(LoxException::RuntimeError(RuntimeError::new(
                         expr.paren.line,
                         format!(
                             "Expected {} arguments but got {}.",
-                            function.arity(),
+                            callable.arity(),
                             arguments.len()
                         ),
                     )));
                 }
-                function.call(self, arguments)
+                callable.call(self, arguments)
             }
             _ => Err(LoxException::RuntimeError(RuntimeError::new(
                 expr.paren.line,
@@ -321,9 +326,34 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
+    fn visit_get_expr(&mut self, expr: &Get) -> Result<LoxObject, LoxException> {
+        let object = self.evaluate(&expr.object)?;
+        match object {
+            LoxObject::Instance(instance) => instance.get(&expr.name),
+            _ => Err(LoxException::RuntimeError(RuntimeError::new(
+                expr.name.line,
+                String::from("Only instances have properties."),
+            ))),
+        }
+    }
+
+    fn visit_set_expr(&mut self, expr: &Set) -> Result<LoxObject, LoxException> {
+        let object = self.evaluate(&expr.object)?;
+        match object {
+            LoxObject::Instance(mut instance) => {
+                let value = self.evaluate(&expr.value)?;
+                Ok(instance.set(&expr.name, value.clone()))
+            }
+            _ => Err(LoxException::RuntimeError(RuntimeError::new(
+                expr.name.line,
+                String::from("Only instances have fields."),
+            ))),
+        }
+    }
+
     fn visit_closure_expr(&mut self, expr: &Closure) -> Result<LoxObject, LoxException> {
-        let closure = LoxCallable::new_lox_closure(expr, Rc::clone(&self.environment));
-        Ok(LoxObject::Callable(closure))
+        let closure = LoxFunction::new(expr, Rc::clone(&self.environment), None);
+        Ok(LoxObject::Callable(Callable::Function(closure)))
     }
 }
 
@@ -392,15 +422,32 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
 
     fn visit_function_stmt(&mut self, stmt: &Function) -> Result<(), LoxException> {
         let function_name = stmt.name.lexeme.clone();
-        let function = LoxCallable::new_lox_fun(stmt, Rc::clone(&self.environment));
-        self.environment
-            .borrow_mut()
-            .define(function_name, LoxObject::Callable(function));
+        let function = LoxFunction::new(
+            &stmt.closure,
+            Rc::clone(&self.environment),
+            Some(function_name.clone()),
+        );
+        self.environment.borrow_mut().define(
+            function_name,
+            LoxObject::Callable(Callable::Function(function)),
+        );
         Ok(())
     }
 
     fn visit_return_stmt(&mut self, stmt: &Return) -> Result<(), LoxException> {
         let value = self.evaluate(&stmt.value)?;
         Err(LoxException::Return(value))
+    }
+
+    fn visit_class_stmt(&mut self, stmt: &Class) -> Result<(), LoxException> {
+        let class_name = stmt.name.lexeme.clone();
+        self.environment
+            .borrow_mut()
+            .define(class_name.clone(), LoxObject::Literal(LoxLiteral::Nil));
+        let klass = LoxClass::new(class_name);
+        self.environment
+            .borrow_mut()
+            .assign(&stmt.name, LoxObject::Callable(Callable::Class(klass)))?;
+        Ok(())
     }
 }

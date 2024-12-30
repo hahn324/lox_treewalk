@@ -1,105 +1,53 @@
 use crate::{
-    environment::Environment,
-    expr::Closure,
-    interpreter::Interpreter,
-    lox_exception::LoxException,
-    lox_object::{LoxLiteral, LoxObject},
-    stmt::Function,
+    interpreter::Interpreter, lox_class::LoxClass, lox_exception::LoxException,
+    lox_function::LoxFunction, lox_object::LoxObject, native_function::NativeFunction,
 };
-use std::{cell::RefCell, fmt, rc::Rc};
+use std::fmt;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum FunDeclaration {
-    NativeFunction(fn(&mut Interpreter, Vec<LoxObject>) -> LoxObject),
-    LoxFunction {
-        declaration: Closure,
-        context: Rc<RefCell<Environment>>,
-    },
+pub trait LoxCallable: fmt::Display + PartialEq {
+    fn arity(&self) -> usize;
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: Vec<LoxObject>,
+    ) -> Result<LoxObject, LoxException>;
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LoxCallable {
-    arity: usize,
-    function: FunDeclaration,
-    repr: String,
+pub enum Callable {
+    Function(LoxFunction),
+    NativeFun(NativeFunction),
+    Class(LoxClass),
 }
 
-impl LoxCallable {
-    pub fn new_native_fun(
-        arity: usize,
-        function: fn(&mut Interpreter, Vec<LoxObject>) -> LoxObject,
-        repr: String,
-    ) -> Self {
-        LoxCallable {
-            arity,
-            function: FunDeclaration::NativeFunction(function),
-            repr,
+impl fmt::Display for Callable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Callable::Function(function) => write!(f, "{function}"),
+            Callable::NativeFun(native_fun) => write!(f, "{native_fun}"),
+            Callable::Class(class) => write!(f, "{class}"),
+        }
+    }
+}
+
+impl LoxCallable for Callable {
+    fn arity(&self) -> usize {
+        match self {
+            Callable::Function(function) => function.arity(),
+            Callable::NativeFun(native_fun) => native_fun.arity(),
+            Callable::Class(class) => class.arity(),
         }
     }
 
-    pub fn new_lox_fun(declaration: &Function, context: Rc<RefCell<Environment>>) -> Self {
-        let arity = declaration.closure.params.len();
-        let repr = format!("<fn {}>", declaration.name.lexeme);
-        LoxCallable {
-            arity,
-            function: FunDeclaration::LoxFunction {
-                declaration: declaration.closure.clone(),
-                context,
-            },
-            repr,
-        }
-    }
-
-    pub fn new_lox_closure(declaration: &Closure, context: Rc<RefCell<Environment>>) -> Self {
-        let arity = declaration.params.len();
-        let repr = String::from("<fn>");
-        LoxCallable {
-            arity,
-            function: FunDeclaration::LoxFunction {
-                declaration: declaration.clone(),
-                context,
-            },
-            repr,
-        }
-    }
-
-    pub fn call(
+    fn call(
         &self,
         interpreter: &mut Interpreter,
         arguments: Vec<LoxObject>,
     ) -> Result<LoxObject, LoxException> {
-        match &self.function {
-            FunDeclaration::NativeFunction(function) => Ok(function(interpreter, arguments)),
-            FunDeclaration::LoxFunction {
-                declaration,
-                context,
-            } => {
-                let environment =
-                    Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&context)))));
-                for (idx, value) in arguments.into_iter().enumerate() {
-                    environment
-                        .borrow_mut()
-                        .define(declaration.params[idx].lexeme.clone(), value);
-                }
-
-                match interpreter.execute_block(&declaration.body, environment) {
-                    Ok(_) => Ok(LoxObject::Literal(LoxLiteral::Nil)),
-                    Err(exception) => match exception {
-                        LoxException::RuntimeError(_) => Err(exception),
-                        LoxException::Return(value) => Ok(value),
-                    },
-                }
-            }
+        match self {
+            Callable::Function(function) => function.call(interpreter, arguments),
+            Callable::NativeFun(native_fun) => native_fun.call(interpreter, arguments),
+            Callable::Class(class) => class.call(interpreter, arguments),
         }
-    }
-
-    pub fn arity(&self) -> usize {
-        self.arity
-    }
-}
-
-impl fmt::Display for LoxCallable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.repr)
     }
 }

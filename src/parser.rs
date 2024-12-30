@@ -1,7 +1,8 @@
 use crate::expr::{
-    Assign, Binary, Call, Closure, Expr, Grouping, Literal, Logical, Ternary, Unary, Variable,
+    Assign, Binary, Call, Closure, Expr, Get, Grouping, Literal, Logical, Set, Ternary, Unary,
+    Variable,
 };
-use crate::stmt::{Block, Expression, Function, If, Print, Return, Stmt, Var, While};
+use crate::stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, Var, While};
 use crate::{lox_object::LoxLiteral, report, token::Token, token_type::TokenType};
 use std::{iter::Peekable, vec::IntoIter};
 
@@ -57,6 +58,11 @@ impl Parser {
                     false => self.closure_statement(),
                 }
             }
+            TokenType::Class => {
+                // Consume the Class token.
+                self.advance();
+                self.class_declaration()
+            }
             _ => self.statement(),
         };
         match res {
@@ -67,6 +73,20 @@ impl Parser {
                 None
             }
         }
+    }
+
+    fn class_declaration(&mut self) -> Result<Stmt, LoxParseError> {
+        let name = self.consume(TokenType::Identifier, "Expect class name.")?;
+        self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
+
+        let mut methods = Vec::new();
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            methods.push(self.function("method")?);
+        }
+
+        self.consume(TokenType::RightBrace, "Except '}' after class body.")?;
+
+        Ok(Stmt::Class(Class::new(name, methods)))
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, LoxParseError> {
@@ -300,10 +320,13 @@ impl Parser {
 
         if self.check(&TokenType::Equal) {
             let equals = self.advance().unwrap();
+            let value = Box::new(self.assignment()?);
             match expr {
                 Expr::Variable(variable) => {
-                    let value = Box::new(self.assignment()?);
                     expr = Expr::Assign(Assign::new(variable.name, value));
+                }
+                Expr::Get(get) => {
+                    expr = Expr::Set(Set::new(get.object, get.name, value));
                 }
                 _ => self.parse_error(
                     equals.line,
@@ -468,12 +491,20 @@ impl Parser {
         let mut expr = self.primary()?;
 
         loop {
-            if self.check(&TokenType::LeftParen) {
-                // Consume LeftParen token.
-                self.advance();
-                expr = self.finish_call(expr)?;
-            } else {
-                break;
+            match self.peek_token_type() {
+                TokenType::LeftParen => {
+                    // Consume LeftParen token.
+                    self.advance();
+                    expr = self.finish_call(expr)?;
+                }
+                TokenType::Dot => {
+                    // Consume Dot token.
+                    self.advance();
+                    let name =
+                        self.consume(TokenType::Identifier, "Expect property name after '.'.")?;
+                    expr = Expr::Get(Get::new(Box::new(expr), name));
+                }
+                _ => break,
             }
         }
 
@@ -549,7 +580,7 @@ impl Parser {
                 let next_token_line = next_token.line;
                 let next_token_lexeme = next_token.lexeme.clone();
                 match next_token.token_type {
-                    TokenType::Eof => self.parse_error(next_token_line, " at end", message),
+                    TokenType::Eof => self.parse_error(next_token_line, "at end", message),
                     _ => self.parse_error(
                         next_token_line,
                         &format!("at '{}'", next_token_lexeme),

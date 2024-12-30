@@ -11,6 +11,8 @@ pub trait ExprVisitor<T> {
     fn visit_logical_expr(&mut self, expr: &Logical) -> T;
     fn visit_call_expr(&mut self, expr: &Call) -> T;
     fn visit_closure_expr(&mut self, expr: &Closure) -> T;
+    fn visit_get_expr(&mut self, expr: &Get) -> T;
+    fn visit_set_expr(&mut self, expr: &Set) -> T;
 }
 
 #[derive(Debug, Clone)]
@@ -25,6 +27,8 @@ pub enum Expr {
     Logical(Logical),
     Call(Call),
     Closure(Closure),
+    Get(Get),
+    Set(Set),
 }
 
 impl Expr {
@@ -40,6 +44,8 @@ impl Expr {
             Expr::Logical(logical) => visitor.visit_logical_expr(logical),
             Expr::Call(call) => visitor.visit_call_expr(call),
             Expr::Closure(closure) => visitor.visit_closure_expr(closure),
+            Expr::Get(get) => visitor.visit_get_expr(get),
+            Expr::Set(set) => visitor.visit_set_expr(set),
         }
     }
 }
@@ -174,5 +180,32 @@ impl Closure {
 impl PartialEq for Closure {
     fn eq(&self, _: &Self) -> bool {
         false
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Get {
+    pub object: Box<Expr>,
+    pub name: Token,
+}
+impl Get {
+    pub fn new(object: Box<Expr>, name: Token) -> Self {
+        Get { object, name }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Set {
+    pub object: Box<Expr>,
+    pub name: Token,
+    pub value: Box<Expr>,
+}
+impl Set {
+    pub fn new(object: Box<Expr>, name: Token, value: Box<Expr>) -> Self {
+        Set {
+            object,
+            name,
+            value,
+        }
     }
 }

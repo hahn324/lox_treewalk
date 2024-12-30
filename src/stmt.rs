@@ -13,6 +13,7 @@ pub trait StmtVisitor<T> {
     fn visit_break_stmt(&mut self) -> T;
     fn visit_function_stmt(&mut self, stmt: &Function) -> T;
     fn visit_return_stmt(&mut self, stmt: &Return) -> T;
+    fn visit_class_stmt(&mut self, stmt: &Class) -> T;
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ pub enum Stmt {
     Break,
     Function(Function),
     Return(Return),
+    Class(Class),
 }
 
 impl Stmt {
@@ -40,6 +42,7 @@ impl Stmt {
             Stmt::Break => visitor.visit_break_stmt(),
             Stmt::Function(function) => visitor.visit_function_stmt(function),
             Stmt::Return(return_stmt) => visitor.visit_return_stmt(return_stmt),
+            Stmt::Class(class) => visitor.visit_class_stmt(class),
         }
     }
 }
@@ -137,5 +140,16 @@ pub struct Return {
 impl Return {
     pub fn new(keyword: Token, value: Expr) -> Self {
         Return { keyword, value }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Class {
+    pub name: Token,
+    pub methods: Vec<Stmt>,
+}
+impl Class {
+    pub fn new(name: Token, methods: Vec<Stmt>) -> Self {
+        Class { name, methods }
     }
 }

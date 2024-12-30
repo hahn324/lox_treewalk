@@ -37,15 +37,17 @@ impl Environment {
     }
 
     pub fn get_at(&self, distance: usize, name: &str) -> LoxObject {
-        let expect_msg = "Expect to find variable due to semantic analysis in Resolver.";
+        let expect_msg = format!(
+            "Expect to find variable '{name}' at distance {distance} due to semantic analysis in Resolver."
+        );
         if distance == 0 {
-            self.values.get(name).expect(expect_msg).clone()
+            self.values.get(name).expect(&expect_msg).clone()
         } else {
             self.ancestor(distance)
                 .borrow()
                 .values
                 .get(name)
-                .expect(expect_msg)
+                .expect(&expect_msg)
                 .clone()
         }
     }
