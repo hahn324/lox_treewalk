@@ -1,11 +1,13 @@
-use crate::expr::{
-    Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
-    Ternary, Unary, Variable,
+use crate::{
+    expr::{
+        Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
+        Ternary, Unary, Variable,
+    },
+    interpreter::Interpreter,
+    report,
+    stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While},
+    token::Token,
 };
-use crate::stmt::{
-    Block, Class, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While,
-};
-use crate::{interpreter::Interpreter, report, token::Token};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

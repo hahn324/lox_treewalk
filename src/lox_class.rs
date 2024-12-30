@@ -2,7 +2,7 @@ use crate::{
     interpreter::Interpreter, lox_callable::LoxCallable, lox_exception::LoxException,
     lox_instance::LoxInstance, lox_object::LoxObject,
 };
-use std::fmt;
+use std::{cell::RefCell, fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LoxClass {
@@ -27,6 +27,6 @@ impl LoxCallable for LoxClass {
 
     fn call(&self, _: &mut Interpreter, _: Vec<LoxObject>) -> Result<LoxObject, LoxException> {
         let instance = LoxInstance::new(self.clone());
-        Ok(LoxObject::Instance(instance))
+        Ok(LoxObject::Instance(Rc::new(RefCell::new(instance))))
     }
 }

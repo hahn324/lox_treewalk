@@ -1,10 +1,10 @@
 use crate::{lox_callable::Callable, lox_instance::LoxInstance};
-use std::fmt;
+use std::{cell::RefCell, fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoxLiteral {
     Number(f64),
-    String(String),
+    String(Rc<String>),
     Boolean(bool),
     Nil,
 }
@@ -23,8 +23,8 @@ impl fmt::Display for LoxLiteral {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoxObject {
     Literal(LoxLiteral),
-    Callable(Callable),
-    Instance(LoxInstance),
+    Callable(Rc<Callable>),
+    Instance(Rc<RefCell<LoxInstance>>),
 }
 
 impl fmt::Display for LoxObject {
@@ -32,7 +32,7 @@ impl fmt::Display for LoxObject {
         match self {
             LoxObject::Literal(literal) => write!(f, "{literal}"),
             LoxObject::Callable(function) => write!(f, "{function}"),
-            LoxObject::Instance(instance) => write!(f, "{instance}"),
+            LoxObject::Instance(instance) => write!(f, "{}", instance.borrow()),
         }
     }
 }

@@ -1,5 +1,4 @@
-use crate::lox_object::LoxLiteral;
-use crate::token_type::TokenType;
+use crate::{lox_object::LoxLiteral, token_type::TokenType};
 use std::{
     fmt,
     hash::{Hash, Hasher},

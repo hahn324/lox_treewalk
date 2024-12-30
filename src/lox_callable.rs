@@ -4,7 +4,7 @@ use crate::{
 };
 use std::fmt;
 
-pub trait LoxCallable: fmt::Display + PartialEq {
+pub trait LoxCallable: fmt::Display {
     fn arity(&self) -> usize;
     fn call(
         &self,

@@ -1,18 +1,16 @@
-use crate::expr::{
-    Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
-    Ternary, Unary, Variable,
-};
-use crate::stmt::{
-    Block, Class, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While,
-};
 use crate::{
     environment::Environment,
+    expr::{
+        Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
+        Ternary, Unary, Variable,
+    },
     lox_callable::{Callable, LoxCallable},
     lox_class::LoxClass,
     lox_exception::{LoxException, RuntimeError},
     lox_function::LoxFunction,
     lox_object::{LoxLiteral, LoxObject},
     native_function::NativeFunction,
+    stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While},
     token::Token,
     token_type::TokenType,
 };
@@ -37,11 +35,11 @@ impl Interpreter {
                     .as_secs_f64(),
             ))
         };
-        let global_clock = LoxObject::Callable(Callable::NativeFun(NativeFunction::new(
+        let global_clock = LoxObject::Callable(Rc::new(Callable::NativeFun(NativeFunction::new(
             clock_function,
             0,
             String::from("<native fn>"),
-        )));
+        ))));
 
         globals
             .borrow_mut()
@@ -167,14 +165,14 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
                 (
                     LoxObject::Literal(LoxLiteral::String(left_val)),
                     LoxObject::Literal(LoxLiteral::String(right_val)),
-                ) => Ok(LoxObject::Literal(LoxLiteral::String(format!(
+                ) => Ok(LoxObject::Literal(LoxLiteral::String(Rc::new(format!(
                     "{left_val}{right_val}"
-                )))),
+                ))))),
                 (LoxObject::Literal(LoxLiteral::String(left_val)), right) => Ok(
-                    LoxObject::Literal(LoxLiteral::String(format!("{left_val}{right}",))),
+                    LoxObject::Literal(LoxLiteral::String(Rc::new(format!("{left_val}{right}",)))),
                 ),
                 (left, LoxObject::Literal(LoxLiteral::String(right_val))) => Ok(
-                    LoxObject::Literal(LoxLiteral::String(format!("{left}{right_val}",))),
+                    LoxObject::Literal(LoxLiteral::String(Rc::new(format!("{left}{right_val}",)))),
                 ),
                 _ => Err(LoxException::RuntimeError(RuntimeError::new(
                     expr.operator.line,
@@ -329,7 +327,7 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
     fn visit_get_expr(&mut self, expr: &Get) -> Result<LoxObject, LoxException> {
         let object = self.evaluate(&expr.object)?;
         match object {
-            LoxObject::Instance(instance) => instance.get(&expr.name),
+            LoxObject::Instance(instance) => instance.borrow().get(&expr.name),
             _ => Err(LoxException::RuntimeError(RuntimeError::new(
                 expr.name.line,
                 String::from("Only instances have properties."),
@@ -340,9 +338,9 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
     fn visit_set_expr(&mut self, expr: &Set) -> Result<LoxObject, LoxException> {
         let object = self.evaluate(&expr.object)?;
         match object {
-            LoxObject::Instance(mut instance) => {
+            LoxObject::Instance(instance) => {
                 let value = self.evaluate(&expr.value)?;
-                Ok(instance.set(&expr.name, value.clone()))
+                Ok(instance.borrow_mut().set(&expr.name, value.clone()))
             }
             _ => Err(LoxException::RuntimeError(RuntimeError::new(
                 expr.name.line,
@@ -353,7 +351,7 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
 
     fn visit_closure_expr(&mut self, expr: &Closure) -> Result<LoxObject, LoxException> {
         let closure = LoxFunction::new(expr, Rc::clone(&self.environment), None);
-        Ok(LoxObject::Callable(Callable::Function(closure)))
+        Ok(LoxObject::Callable(Rc::new(Callable::Function(closure))))
     }
 }
 
@@ -429,7 +427,7 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
         );
         self.environment.borrow_mut().define(
             function_name,
-            LoxObject::Callable(Callable::Function(function)),
+            LoxObject::Callable(Rc::new(Callable::Function(function))),
         );
         Ok(())
     }
@@ -445,9 +443,10 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
             .borrow_mut()
             .define(class_name.clone(), LoxObject::Literal(LoxLiteral::Nil));
         let klass = LoxClass::new(class_name);
-        self.environment
-            .borrow_mut()
-            .assign(&stmt.name, LoxObject::Callable(Callable::Class(klass)))?;
+        self.environment.borrow_mut().assign(
+            &stmt.name,
+            LoxObject::Callable(Rc::new(Callable::Class(klass))),
+        )?;
         Ok(())
     }
 }

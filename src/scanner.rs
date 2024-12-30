@@ -1,10 +1,5 @@
-use crate::lox_object::LoxLiteral;
-use crate::report;
-use crate::token::Token;
-use crate::token_type::TokenType;
-use std::collections::HashMap;
-use std::iter::Peekable;
-use std::str::Chars;
+use crate::{lox_object::LoxLiteral, report, token::Token, token_type::TokenType};
+use std::{collections::HashMap, iter::Peekable, rc::Rc, str::Chars};
 
 pub struct Scanner<'a> {
     pub tokens: Vec<Token>,
@@ -173,7 +168,7 @@ impl<'a> Scanner<'a> {
 
         // Time the surrounding quotes.
         let value = self.source[self.start + 1..self.current - 1].to_string();
-        self.add_token(TokenType::String, Some(LoxLiteral::String(value)));
+        self.add_token(TokenType::String, Some(LoxLiteral::String(Rc::new(value))));
     }
 
     fn number(&mut self) {

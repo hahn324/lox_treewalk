@@ -1,9 +1,14 @@
-use crate::expr::{
-    Assign, Binary, Call, Closure, Expr, Get, Grouping, Literal, Logical, Set, Ternary, Unary,
-    Variable,
+use crate::{
+    expr::{
+        Assign, Binary, Call, Closure, Expr, Get, Grouping, Literal, Logical, Set, Ternary, Unary,
+        Variable,
+    },
+    lox_object::LoxLiteral,
+    report,
+    stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, Var, While},
+    token::Token,
+    token_type::TokenType,
 };
-use crate::stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, Var, While};
-use crate::{lox_object::LoxLiteral, report, token::Token, token_type::TokenType};
 use std::{iter::Peekable, vec::IntoIter};
 
 #[derive(Debug)]
