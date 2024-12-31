@@ -1,4 +1,4 @@
-use crate::{lox_callable::Callable, lox_instance::LoxInstance};
+use crate::{lox_callable::LoxCallable, lox_instance::LoxInstance};
 use std::{cell::RefCell, fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,7 +23,7 @@ impl fmt::Display for LoxLiteral {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoxObject {
     Literal(LoxLiteral),
-    Callable(Rc<Callable>),
+    Callable(Rc<LoxCallable>),
     Instance(Rc<RefCell<LoxInstance>>),
 }
 

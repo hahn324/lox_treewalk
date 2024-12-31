@@ -1,9 +1,10 @@
 use crate::{
     expr::{
         Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
-        Ternary, Unary, Variable,
+        Ternary, This, Unary, Variable,
     },
     interpreter::Interpreter,
+    lox_object::LoxLiteral,
     report,
     stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, StmtVisitor, Var, While},
     token::Token,
@@ -15,12 +16,20 @@ enum FunctionType {
     None,
     Function,
     Method,
+    Initializer,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ClassType {
+    None,
+    Class,
 }
 
 pub struct Resolver<'interpreter> {
     interpreter: &'interpreter mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
     current_function: FunctionType,
+    current_class: ClassType,
     pub had_error: bool,
 }
 impl<'interpreter> Resolver<'interpreter> {
@@ -29,6 +38,7 @@ impl<'interpreter> Resolver<'interpreter> {
             interpreter,
             scopes: Vec::new(),
             current_function: FunctionType::None,
+            current_class: ClassType::None,
             had_error: false,
         }
     }
@@ -75,8 +85,7 @@ impl<'interpreter> Resolver<'interpreter> {
             return;
         }
 
-        let scope = self.get_cur_scope();
-        scope.insert(name.lexeme.clone(), true);
+        self.get_cur_scope().insert(name.lexeme.clone(), true);
     }
 
     fn resolve_local(&mut self, name: &Token) {
@@ -179,6 +188,18 @@ impl<'interpreter> ExprVisitor<()> for Resolver<'interpreter> {
         self.resolve_expr(&expr.object);
     }
 
+    fn visit_this_expr(&mut self, expr: &This) {
+        if self.current_class == ClassType::None {
+            self.resolver_error(
+                expr.keyword.line,
+                "at 'this'",
+                "Can't use 'this' outside of a class.",
+            );
+        }
+
+        self.resolve_local(&expr.keyword);
+    }
+
     fn visit_closure_expr(&mut self, expr: &Closure) {
         self.resolve_function(expr, FunctionType::Function);
     }
@@ -237,17 +258,42 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
                 "Can't return from top-level code.",
             );
         }
-        self.resolve_expr(&stmt.value);
+        match &stmt.value {
+            Expr::Literal(literal) if literal.value == LoxLiteral::Nil => (),
+            _ if self.current_function == FunctionType::Initializer => {
+                self.resolver_error(
+                    stmt.keyword.line,
+                    "at 'return",
+                    "Can't return a value from an initializer.",
+                );
+            }
+            _ => {
+                self.resolve_expr(&stmt.value);
+            }
+        }
     }
 
     fn visit_class_stmt(&mut self, stmt: &Class) {
+        let enclosing_class = self.current_class;
+        self.current_class = ClassType::Class;
+
         self.declare(&stmt.name);
         self.define(&stmt.name);
 
+        self.begin_scope();
+        self.get_cur_scope().insert(String::from("this"), true);
+
         for method in stmt.methods.iter() {
             if let Stmt::Function(function) = method {
-                self.resolve_function(&function.closure, FunctionType::Method);
+                let declaration = match function.name.lexeme == "init" {
+                    true => FunctionType::Initializer,
+                    false => FunctionType::Method,
+                };
+                self.resolve_function(&function.closure, declaration);
             }
         }
+
+        self.end_scope();
+        self.current_class = enclosing_class;
     }
 }

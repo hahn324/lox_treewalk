@@ -4,50 +4,41 @@ use crate::{
 };
 use std::fmt;
 
-pub trait LoxCallable: fmt::Display {
-    fn arity(&self) -> usize;
-    fn call(
-        &self,
-        interpreter: &mut Interpreter,
-        arguments: Vec<LoxObject>,
-    ) -> Result<LoxObject, LoxException>;
-}
-
 #[derive(Debug, Clone, PartialEq)]
-pub enum Callable {
+pub enum LoxCallable {
     Function(LoxFunction),
     NativeFun(NativeFunction),
     Class(LoxClass),
 }
 
-impl fmt::Display for Callable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl LoxCallable {
+    pub fn arity(&self) -> usize {
         match self {
-            Callable::Function(function) => write!(f, "{function}"),
-            Callable::NativeFun(native_fun) => write!(f, "{native_fun}"),
-            Callable::Class(class) => write!(f, "{class}"),
-        }
-    }
-}
-
-impl LoxCallable for Callable {
-    fn arity(&self) -> usize {
-        match self {
-            Callable::Function(function) => function.arity(),
-            Callable::NativeFun(native_fun) => native_fun.arity(),
-            Callable::Class(class) => class.arity(),
+            LoxCallable::Function(function) => function.arity(),
+            LoxCallable::NativeFun(native_fun) => native_fun.arity(),
+            LoxCallable::Class(class) => class.arity(),
         }
     }
 
-    fn call(
+    pub fn call(
         &self,
         interpreter: &mut Interpreter,
         arguments: Vec<LoxObject>,
     ) -> Result<LoxObject, LoxException> {
         match self {
-            Callable::Function(function) => function.call(interpreter, arguments),
-            Callable::NativeFun(native_fun) => native_fun.call(interpreter, arguments),
-            Callable::Class(class) => class.call(interpreter, arguments),
+            LoxCallable::Function(function) => function.call(interpreter, arguments),
+            LoxCallable::NativeFun(native_fun) => native_fun.call(interpreter, arguments),
+            LoxCallable::Class(class) => class.call(interpreter, arguments),
+        }
+    }
+}
+
+impl fmt::Display for LoxCallable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LoxCallable::Function(function) => write!(f, "{function}"),
+            LoxCallable::NativeFun(native_fun) => write!(f, "{native_fun}"),
+            LoxCallable::Class(class) => write!(f, "{class}"),
         }
     }
 }

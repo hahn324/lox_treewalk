@@ -13,6 +13,7 @@ pub trait ExprVisitor<T> {
     fn visit_closure_expr(&mut self, expr: &Closure) -> T;
     fn visit_get_expr(&mut self, expr: &Get) -> T;
     fn visit_set_expr(&mut self, expr: &Set) -> T;
+    fn visit_this_expr(&mut self, expr: &This) -> T;
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +30,7 @@ pub enum Expr {
     Closure(Closure),
     Get(Get),
     Set(Set),
+    This(This),
 }
 
 impl Expr {
@@ -46,6 +48,7 @@ impl Expr {
             Expr::Closure(closure) => visitor.visit_closure_expr(closure),
             Expr::Get(get) => visitor.visit_get_expr(get),
             Expr::Set(set) => visitor.visit_set_expr(set),
+            Expr::This(this) => visitor.visit_this_expr(this),
         }
     }
 }
@@ -207,5 +210,15 @@ impl Set {
             name,
             value,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct This {
+    pub keyword: Token,
+}
+impl This {
+    pub fn new(keyword: Token) -> Self {
+        This { keyword }
     }
 }

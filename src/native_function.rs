@@ -1,7 +1,4 @@
-use crate::{
-    interpreter::Interpreter, lox_callable::LoxCallable, lox_exception::LoxException,
-    lox_object::LoxObject,
-};
+use crate::{interpreter::Interpreter, lox_exception::LoxException, lox_object::LoxObject};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,24 +19,22 @@ impl NativeFunction {
             repr,
         }
     }
-}
 
-impl fmt::Display for NativeFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.repr)
-    }
-}
-
-impl LoxCallable for NativeFunction {
-    fn arity(&self) -> usize {
+    pub fn arity(&self) -> usize {
         self.arity
     }
 
-    fn call(
+    pub fn call(
         &self,
         interpreter: &mut Interpreter,
         arguments: Vec<LoxObject>,
     ) -> Result<LoxObject, LoxException> {
         Ok((self.function)(interpreter, arguments))
+    }
+}
+
+impl fmt::Display for NativeFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.repr)
     }
 }

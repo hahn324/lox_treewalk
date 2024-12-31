@@ -1,7 +1,7 @@
 use crate::{
     expr::{
-        Assign, Binary, Call, Closure, Expr, Get, Grouping, Literal, Logical, Set, Ternary, Unary,
-        Variable,
+        Assign, Binary, Call, Closure, Expr, Get, Grouping, Literal, Logical, Set, Ternary, This,
+        Unary, Variable,
     },
     lox_object::LoxLiteral,
     report,
@@ -553,6 +553,10 @@ impl Parser {
 
         if self.check(&TokenType::Identifier) {
             return Ok(Expr::Variable(Variable::new(self.advance().unwrap())));
+        }
+
+        if self.check(&TokenType::This) {
+            return Ok(Expr::This(This::new(self.advance().unwrap())));
         }
 
         if self.check(&TokenType::LeftParen) {
