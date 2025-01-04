@@ -1,7 +1,7 @@
 use crate::{
     expr::{
-        Assign, Binary, Call, Closure, Expr, Get, Grouping, Literal, Logical, Set, Ternary, This,
-        Unary, Variable,
+        Assign, Binary, Call, Closure, Expr, Get, Grouping, Literal, Logical, Set, Super, Ternary,
+        This, Unary, Variable,
     },
     lox_object::LoxLiteral,
     report,
@@ -82,6 +82,13 @@ impl Parser {
 
     fn class_declaration(&mut self) -> Result<Stmt, LoxParseError> {
         let name = self.consume(TokenType::Identifier, "Expect class name.")?;
+
+        let mut superclass = None;
+        if let Some(_) = self.match_token_type(&[TokenType::Less]) {
+            let superclass_name = self.consume(TokenType::Identifier, "Expect superclass name.")?;
+            superclass = Some(Box::new(Expr::Variable(Variable::new(superclass_name))));
+        }
+
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
 
         let mut methods = Vec::new();
@@ -91,7 +98,7 @@ impl Parser {
 
         self.consume(TokenType::RightBrace, "Except '}' after class body.")?;
 
-        Ok(Stmt::Class(Class::new(name, methods)))
+        Ok(Stmt::Class(Class::new(name, superclass, methods)))
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, LoxParseError> {
@@ -151,7 +158,7 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt, LoxParseError> {
-        let token_types = vec![
+        let token_types = [
             TokenType::Print,
             TokenType::LeftBrace,
             TokenType::If,
@@ -311,8 +318,7 @@ impl Parser {
     fn comma(&mut self) -> Result<Expr, LoxParseError> {
         let mut expr = self.assignment()?;
 
-        let token_types = vec![TokenType::Comma];
-        while let Some(operator) = self.match_token_type(&token_types) {
+        while let Some(operator) = self.match_token_type(&[TokenType::Comma]) {
             let right = self.assignment()?;
             expr = Expr::Binary(Binary::new(Box::new(expr), operator, Box::new(right)));
         }
@@ -375,8 +381,7 @@ impl Parser {
     fn or(&mut self) -> Result<Expr, LoxParseError> {
         let mut expr = self.and()?;
 
-        let token_types = vec![TokenType::Or];
-        while let Some(operator) = self.match_token_type(&token_types) {
+        while let Some(operator) = self.match_token_type(&[TokenType::Or]) {
             let right = Box::new(self.and()?);
             expr = Expr::Logical(Logical::new(Box::new(expr), operator, right));
         }
@@ -387,8 +392,7 @@ impl Parser {
     fn and(&mut self) -> Result<Expr, LoxParseError> {
         let mut expr = self.equality()?;
 
-        let token_types = vec![TokenType::And];
-        while let Some(operator) = self.match_token_type(&token_types) {
+        while let Some(operator) = self.match_token_type(&[TokenType::And]) {
             let right = Box::new(self.equality()?);
             expr = Expr::Logical(Logical::new(Box::new(expr), operator, right));
         }
@@ -399,7 +403,7 @@ impl Parser {
     fn equality(&mut self) -> Result<Expr, LoxParseError> {
         let mut expr = self.comparison()?;
 
-        let token_types = vec![TokenType::BangEqual, TokenType::EqualEqual];
+        let token_types = [TokenType::BangEqual, TokenType::EqualEqual];
         while let Some(operator) = self.match_token_type(&token_types) {
             let right = Box::new(self.comparison()?);
             expr = Expr::Binary(Binary::new(Box::new(expr), operator, right));
@@ -411,7 +415,7 @@ impl Parser {
     fn comparison(&mut self) -> Result<Expr, LoxParseError> {
         let mut expr = self.term()?;
 
-        let token_types = vec![
+        let token_types = [
             TokenType::Greater,
             TokenType::GreaterEqual,
             TokenType::Less,
@@ -428,7 +432,7 @@ impl Parser {
     fn term(&mut self) -> Result<Expr, LoxParseError> {
         let mut expr = self.factor()?;
 
-        let token_types = vec![TokenType::Minus, TokenType::Plus];
+        let token_types = [TokenType::Minus, TokenType::Plus];
         while let Some(operator) = self.match_token_type(&token_types) {
             let right = Box::new(self.factor()?);
             expr = Expr::Binary(Binary::new(Box::new(expr), operator, right));
@@ -440,7 +444,7 @@ impl Parser {
     fn factor(&mut self) -> Result<Expr, LoxParseError> {
         let mut expr = self.binary_operator_error()?;
 
-        let token_types = vec![TokenType::Slash, TokenType::Star];
+        let token_types = [TokenType::Slash, TokenType::Star];
         while let Some(operator) = self.match_token_type(&token_types) {
             let right = Box::new(self.binary_operator_error()?);
             expr = Expr::Binary(Binary::new(Box::new(expr), operator, right));
@@ -450,7 +454,7 @@ impl Parser {
     }
 
     fn binary_operator_error(&mut self) -> Result<Expr, LoxParseError> {
-        let token_types = vec![
+        let token_types = [
             TokenType::Comma,
             TokenType::BangEqual,
             TokenType::EqualEqual,
@@ -484,7 +488,7 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr, LoxParseError> {
-        let token_types = vec![TokenType::Bang, TokenType::Minus];
+        let token_types = [TokenType::Bang, TokenType::Minus];
         if let Some(operator) = self.match_token_type(&token_types) {
             let right = Box::new(self.unary()?);
             return Ok(Expr::Unary(Unary::new(operator, right)));
@@ -540,7 +544,7 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Expr, LoxParseError> {
-        let literal_token_types = vec![
+        let literal_token_types = [
             TokenType::False,
             TokenType::True,
             TokenType::Nil,
@@ -551,32 +555,44 @@ impl Parser {
             return Ok(Expr::Literal(Literal::new(token.literal.unwrap())));
         }
 
-        if self.check(&TokenType::Identifier) {
-            return Ok(Expr::Variable(Variable::new(self.advance().unwrap())));
-        }
+        let other_primary_token_types = [
+            TokenType::Identifier,
+            TokenType::This,
+            TokenType::LeftParen,
+            TokenType::Super,
+        ];
+        if let Some(token) = self.match_token_type(&other_primary_token_types) {
+            let expr = match token.token_type {
+                TokenType::Identifier => Expr::Variable(Variable::new(token)),
+                TokenType::This => Expr::This(This::new(token)),
+                TokenType::LeftParen => {
+                    let expr = Box::new(self.expression()?);
+                    self.consume(TokenType::RightParen, "Expect ')' after expression")?;
+                    Expr::Grouping(Grouping::new(expr))
+                }
+                TokenType::Super => {
+                    self.consume(TokenType::Dot, "Expect '.' after 'super'.")?;
+                    let method =
+                        self.consume(TokenType::Identifier, "Expect superclass method name.")?;
+                    Expr::Super(Super::new(token, method))
+                }
+                _ => unreachable!(),
+            };
 
-        if self.check(&TokenType::This) {
-            return Ok(Expr::This(This::new(self.advance().unwrap())));
-        }
+            Ok(expr)
+        } else {
+            // Will always be Some variant from peek since we never consume the last Eof token.
+            let next_token = self.token_iter.peek().unwrap();
+            let next_token_line = next_token.line;
+            let next_token_lexeme = next_token.lexeme.clone();
+            self.parse_error(
+                next_token_line,
+                &format!("at '{}'", next_token_lexeme),
+                "Failed to match a valid expression.",
+            );
 
-        if self.check(&TokenType::LeftParen) {
-            // Consume the LeftParen token.
-            self.advance();
-            let expr = Box::new(self.expression()?);
-            self.consume(TokenType::RightParen, "Expect ')' after expression")?;
-            return Ok(Expr::Grouping(Grouping::new(expr)));
+            Err(LoxParseError)
         }
-
-        // Will always be Some variant from peek since we never consume the last Eof token.
-        let next_token = self.token_iter.peek().unwrap();
-        let next_token_line = next_token.line;
-        let next_token_lexeme = next_token.lexeme.clone();
-        self.parse_error(
-            next_token_line,
-            &format!("at '{}'", next_token_lexeme),
-            "Failed to match a valid expression.",
-        );
-        Err(LoxParseError)
     }
 
     fn consume(&mut self, token_type: TokenType, message: &str) -> Result<Token, LoxParseError> {
@@ -601,7 +617,7 @@ impl Parser {
         }
     }
 
-    fn match_token_type(&mut self, token_types: &Vec<TokenType>) -> Option<Token> {
+    fn match_token_type(&mut self, token_types: &[TokenType]) -> Option<Token> {
         for token_type in token_types {
             if self.check(token_type) {
                 return self.advance();

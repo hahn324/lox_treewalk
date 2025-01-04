@@ -14,6 +14,7 @@ pub trait ExprVisitor<T> {
     fn visit_get_expr(&mut self, expr: &Get) -> T;
     fn visit_set_expr(&mut self, expr: &Set) -> T;
     fn visit_this_expr(&mut self, expr: &This) -> T;
+    fn visit_super_expr(&mut self, expr: &Super) -> T;
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +32,7 @@ pub enum Expr {
     Get(Get),
     Set(Set),
     This(This),
+    Super(Super),
 }
 
 impl Expr {
@@ -49,6 +51,7 @@ impl Expr {
             Expr::Get(get) => visitor.visit_get_expr(get),
             Expr::Set(set) => visitor.visit_set_expr(set),
             Expr::This(this) => visitor.visit_this_expr(this),
+            Expr::Super(super_expr) => visitor.visit_super_expr(super_expr),
         }
     }
 }
@@ -220,5 +223,16 @@ pub struct This {
 impl This {
     pub fn new(keyword: Token) -> Self {
         This { keyword }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Super {
+    pub keyword: Token,
+    pub method: Token,
+}
+impl Super {
+    pub fn new(keyword: Token, method: Token) -> Self {
+        Super { keyword, method }
     }
 }

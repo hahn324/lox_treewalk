@@ -30,7 +30,7 @@ impl LoxInstance {
         }
 
         match self.klass.find_method(&name.lexeme) {
-            Some(method) => Ok(LoxObject::Callable(Rc::new(LoxCallable::Function(
+            Some(method) => Ok(LoxObject::Callable(LoxCallable::Function(Rc::new(
                 method.bind(instance),
             )))),
             None => Err(LoxException::RuntimeError(RuntimeError::new(

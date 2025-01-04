@@ -7,11 +7,20 @@ use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 #[derive(Debug, Clone, PartialEq)]
 pub struct LoxClass {
     pub name: String,
+    pub superclass: Option<Rc<LoxClass>>,
     pub methods: HashMap<String, LoxFunction>,
 }
 impl LoxClass {
-    pub fn new(name: String, methods: HashMap<String, LoxFunction>) -> Self {
-        LoxClass { name, methods }
+    pub fn new(
+        name: String,
+        superclass: Option<Rc<LoxClass>>,
+        methods: HashMap<String, LoxFunction>,
+    ) -> Self {
+        LoxClass {
+            name,
+            superclass,
+            methods,
+        }
     }
 
     pub fn arity(&self) -> usize {
@@ -34,7 +43,14 @@ impl LoxClass {
     }
 
     pub fn find_method(&self, name: &str) -> Option<&LoxFunction> {
-        self.methods.get(name)
+        if self.methods.contains_key(name) {
+            return self.methods.get(name);
+        }
+
+        match self.superclass {
+            Some(ref class) => class.find_method(name),
+            None => None,
+        }
     }
 }
 

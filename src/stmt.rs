@@ -146,10 +146,15 @@ impl Return {
 #[derive(Debug, Clone)]
 pub struct Class {
     pub name: Token,
+    pub superclass: Option<Box<Expr>>,
     pub methods: Vec<Stmt>,
 }
 impl Class {
-    pub fn new(name: Token, methods: Vec<Stmt>) -> Self {
-        Class { name, methods }
+    pub fn new(name: Token, superclass: Option<Box<Expr>>, methods: Vec<Stmt>) -> Self {
+        Class {
+            name,
+            superclass,
+            methods,
+        }
     }
 }

@@ -2,13 +2,13 @@ use crate::{
     interpreter::Interpreter, lox_class::LoxClass, lox_exception::LoxException,
     lox_function::LoxFunction, lox_object::LoxObject, native_function::NativeFunction,
 };
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoxCallable {
-    Function(LoxFunction),
-    NativeFun(NativeFunction),
-    Class(LoxClass),
+    Function(Rc<LoxFunction>),
+    NativeFun(Rc<NativeFunction>),
+    Class(Rc<LoxClass>),
 }
 
 impl LoxCallable {

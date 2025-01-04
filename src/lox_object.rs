@@ -23,7 +23,7 @@ impl fmt::Display for LoxLiteral {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoxObject {
     Literal(LoxLiteral),
-    Callable(Rc<LoxCallable>),
+    Callable(LoxCallable),
     Instance(Rc<RefCell<LoxInstance>>),
 }
 

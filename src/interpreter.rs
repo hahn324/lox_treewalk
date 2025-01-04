@@ -2,7 +2,7 @@ use crate::{
     environment::Environment,
     expr::{
         Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
-        Ternary, This, Unary, Variable,
+        Super, Ternary, This, Unary, Variable,
     },
     lox_callable::LoxCallable,
     lox_class::LoxClass,
@@ -35,7 +35,7 @@ impl Interpreter {
                     .as_secs_f64(),
             ))
         };
-        let global_clock = LoxObject::Callable(Rc::new(LoxCallable::NativeFun(
+        let global_clock = LoxObject::Callable(LoxCallable::NativeFun(Rc::new(
             NativeFunction::new(clock_function, 0, String::from("<native fn>")),
         )));
 
@@ -351,9 +351,39 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         self.look_up_variable(&expr.keyword)
     }
 
+    fn visit_super_expr(&mut self, expr: &Super) -> Result<LoxObject, LoxException> {
+        let distance = self
+            .locals
+            .get(&expr.keyword)
+            .expect("Expected super local to resolve.");
+        let superclass = self.environment.borrow().get_at(*distance, "super");
+
+        let object = self.environment.borrow().get_at(*distance - 1, "this");
+        let instance = match object {
+            LoxObject::Instance(ref instance) => instance,
+            _ => unreachable!(),
+        };
+
+        let method = match superclass {
+            LoxObject::Callable(LoxCallable::Class(ref class)) => {
+                class.find_method(&expr.method.lexeme)
+            }
+            _ => unreachable!(),
+        };
+        match method {
+            Some(function) => Ok(LoxObject::Callable(LoxCallable::Function(Rc::new(
+                function.bind(instance),
+            )))),
+            None => Err(LoxException::RuntimeError(RuntimeError::new(
+                expr.method.line,
+                format!("Undefined property '{}'.", &expr.method.lexeme),
+            ))),
+        }
+    }
+
     fn visit_closure_expr(&mut self, expr: &Closure) -> Result<LoxObject, LoxException> {
         let closure = LoxFunction::new(expr, Rc::clone(&self.environment), None, false);
-        Ok(LoxObject::Callable(Rc::new(LoxCallable::Function(closure))))
+        Ok(LoxObject::Callable(LoxCallable::Function(Rc::new(closure))))
     }
 }
 
@@ -430,7 +460,7 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
         );
         self.environment.borrow_mut().define(
             function_name,
-            LoxObject::Callable(Rc::new(LoxCallable::Function(function))),
+            LoxObject::Callable(LoxCallable::Function(Rc::new(function))),
         );
         Ok(())
     }
@@ -441,10 +471,42 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
     }
 
     fn visit_class_stmt(&mut self, stmt: &Class) -> Result<(), LoxException> {
+        let mut superclass = None;
+        if let Some(ref superclass_expr) = stmt.superclass {
+            let superclass_err = LoxException::RuntimeError(RuntimeError::new(
+                stmt.name.line,
+                String::from("Superclass must be a class."),
+            ));
+
+            let superclass_obj = self.evaluate(superclass_expr)?;
+            if let LoxObject::Callable(ref callable) = superclass_obj {
+                match callable {
+                    LoxCallable::Class(class) => {
+                        superclass = Some(Rc::clone(class));
+                    }
+                    _ => {
+                        return Err(superclass_err);
+                    }
+                }
+            } else {
+                return Err(superclass_err);
+            }
+        }
+
         let class_name = stmt.name.lexeme.clone();
         self.environment
             .borrow_mut()
             .define(class_name.clone(), LoxObject::Literal(LoxLiteral::Nil));
+
+        if superclass.is_some() {
+            self.environment = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
+                &self.environment,
+            )))));
+            self.environment.borrow_mut().define(
+                String::from("super"),
+                LoxObject::Callable(LoxCallable::Class(Rc::clone(superclass.as_ref().unwrap()))),
+            );
+        }
 
         let mut methods = HashMap::new();
         for method in stmt.methods.iter() {
@@ -460,11 +522,16 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
             }
         }
 
-        let klass = LoxClass::new(class_name, methods);
+        if superclass.is_some() {
+            let enclosing = self.environment.borrow_mut().enclosing.take().unwrap();
+            self.environment = enclosing;
+        }
+
+        let klass = LoxClass::new(class_name, superclass, methods);
 
         self.environment.borrow_mut().assign(
             &stmt.name,
-            LoxObject::Callable(Rc::new(LoxCallable::Class(klass))),
+            LoxObject::Callable(LoxCallable::Class(Rc::new(klass))),
         )?;
         Ok(())
     }

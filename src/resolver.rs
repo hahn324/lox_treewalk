@@ -1,7 +1,7 @@
 use crate::{
     expr::{
         Assign, Binary, Call, Closure, Expr, ExprVisitor, Get, Grouping, Literal, Logical, Set,
-        Ternary, This, Unary, Variable,
+        Super, Ternary, This, Unary, Variable,
     },
     interpreter::Interpreter,
     lox_object::LoxLiteral,
@@ -23,6 +23,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 pub struct Resolver<'interpreter> {
@@ -200,6 +201,22 @@ impl<'interpreter> ExprVisitor<()> for Resolver<'interpreter> {
         self.resolve_local(&expr.keyword);
     }
 
+    fn visit_super_expr(&mut self, expr: &Super) {
+        match self.current_class {
+            ClassType::None => self.resolver_error(
+                expr.keyword.line,
+                "at 'super'",
+                "Can't use 'super' outside of a class.",
+            ),
+            ClassType::Class => self.resolver_error(
+                expr.keyword.line,
+                "at 'super'",
+                "Can't use 'super' in a class with no superclass.",
+            ),
+            ClassType::Subclass => self.resolve_local(&expr.keyword),
+        }
+    }
+
     fn visit_closure_expr(&mut self, expr: &Closure) {
         self.resolve_function(expr, FunctionType::Function);
     }
@@ -280,6 +297,22 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
         self.declare(&stmt.name);
         self.define(&stmt.name);
 
+        if let Some(ref superclass) = stmt.superclass {
+            if let Expr::Variable(superclass_var) = superclass.as_ref() {
+                if stmt.name.lexeme == superclass_var.name.lexeme {
+                    self.resolver_error(
+                        superclass_var.name.line,
+                        &format!("at '{}'", superclass_var.name.lexeme),
+                        "A class can't inherit from itself",
+                    );
+                }
+            }
+            self.current_class = ClassType::Subclass;
+            self.resolve_expr(superclass);
+            self.begin_scope();
+            self.get_cur_scope().insert(String::from("super"), true);
+        }
+
         self.begin_scope();
         self.get_cur_scope().insert(String::from("this"), true);
 
@@ -294,6 +327,11 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
         }
 
         self.end_scope();
+
+        if stmt.superclass.is_some() {
+            self.end_scope();
+        }
+
         self.current_class = enclosing_class;
     }
 }
