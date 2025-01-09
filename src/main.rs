@@ -37,7 +37,6 @@ pub fn run_prompt() -> Result<(), Box<dyn Error>> {
     let mut buffer = String::new();
     let mut interpreter = Interpreter::new();
     loop {
-        buffer.clear();
         print!("> ");
         io::stdout().flush()?;
         match io::stdin().read_line(&mut buffer) {
@@ -45,7 +44,8 @@ pub fn run_prompt() -> Result<(), Box<dyn Error>> {
                 if n == 1 {
                     break;
                 }
-                run(&buffer.trim(), &mut interpreter);
+                run(buffer.leak(), &mut interpreter);
+                buffer = String::new();
             }
             Err(error) => {
                 eprintln!("Error: {error}");
@@ -56,7 +56,7 @@ pub fn run_prompt() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run(source: &str, interpreter: &mut Interpreter) -> i32 {
+fn run<'src>(source: &'src str, interpreter: &mut Interpreter<'src>) -> i32 {
     let mut scanner = Scanner::new(source);
     scanner.scan_tokens();
 

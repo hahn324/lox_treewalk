@@ -16,18 +16,18 @@ use crate::{
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc, time::SystemTime};
 
-pub struct Interpreter {
-    pub globals: Rc<RefCell<Environment>>,
-    pub environment: Rc<RefCell<Environment>>,
-    locals: HashMap<Token, usize>,
+pub struct Interpreter<'src> {
+    pub globals: Rc<RefCell<Environment<'src>>>,
+    pub environment: Rc<RefCell<Environment<'src>>>,
+    locals: HashMap<Token<'src>, usize>,
     active_break: bool,
 }
 
-impl Interpreter {
+impl<'src> Interpreter<'src> {
     pub fn new() -> Self {
         let globals = Rc::new(RefCell::new(Environment::new(None)));
         // Implement global "clock" function.
-        let clock_function = |_: &mut Interpreter, _: Vec<LoxObject>| {
+        let clock_function = |_: &mut Interpreter, _: Vec<LoxObject<'src>>| {
             LoxObject::Literal(LoxLiteral::Number(
                 SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
@@ -39,9 +39,7 @@ impl Interpreter {
             NativeFunction::new(clock_function, 0, String::from("<native fn>")),
         )));
 
-        globals
-            .borrow_mut()
-            .define(String::from("clock"), global_clock);
+        globals.borrow_mut().define("clock", global_clock);
 
         let environment = Rc::clone(&globals);
 
@@ -53,26 +51,26 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, statements: &Vec<Stmt>) -> Result<(), LoxException> {
+    pub fn interpret(&mut self, statements: &Vec<Stmt<'src>>) -> Result<(), LoxException<'src>> {
         for statement in statements {
             self.execute(statement)?;
         }
         Ok(())
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), LoxException> {
+    fn execute(&mut self, stmt: &Stmt<'src>) -> Result<(), LoxException<'src>> {
         stmt.accept(self)
     }
 
-    pub fn resolve(&mut self, token: Token, depth: usize) {
+    pub fn resolve(&mut self, token: Token<'src>, depth: usize) {
         self.locals.insert(token, depth);
     }
 
     pub fn execute_block(
         &mut self,
-        statements: &Vec<Stmt>,
-        environment: Rc<RefCell<Environment>>,
-    ) -> Result<(), LoxException> {
+        statements: &Vec<Stmt<'src>>,
+        environment: Rc<RefCell<Environment<'src>>>,
+    ) -> Result<(), LoxException<'src>> {
         let previous_env = Rc::clone(&self.environment);
         self.environment = environment;
 
@@ -93,11 +91,11 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject, LoxException> {
+    fn evaluate(&mut self, expr: &Expr<'src>) -> Result<LoxObject<'src>, LoxException<'src>> {
         expr.accept(self)
     }
 
-    fn is_truthy(&self, object: &LoxObject) -> bool {
+    fn is_truthy(&self, object: &LoxObject<'src>) -> bool {
         match &object {
             LoxObject::Literal(LoxLiteral::Nil) => false,
             LoxObject::Literal(LoxLiteral::Boolean(res)) => *res,
@@ -105,16 +103,22 @@ impl Interpreter {
         }
     }
 
-    fn look_up_variable(&mut self, name: &Token) -> Result<LoxObject, LoxException> {
+    fn look_up_variable(
+        &mut self,
+        name: &Token<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         match self.locals.get(name) {
-            Some(&distance) => Ok(self.environment.borrow().get_at(distance, &name.lexeme)),
+            Some(&distance) => Ok(self.environment.borrow().get_at(distance, name.lexeme)),
             None => self.globals.borrow().get(name),
         }
     }
 }
 
-impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
-    fn visit_binary_expr(&mut self, expr: &Binary) -> Result<LoxObject, LoxException> {
+impl<'src> ExprVisitor<'src, Result<LoxObject<'src>, LoxException<'src>>> for Interpreter<'src> {
+    fn visit_binary_expr(
+        &mut self,
+        expr: &Binary<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let left = self.evaluate(&expr.left)?;
         let right = self.evaluate(&expr.right)?;
 
@@ -232,15 +236,24 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
-    fn visit_grouping_expr(&mut self, expr: &Grouping) -> Result<LoxObject, LoxException> {
+    fn visit_grouping_expr(
+        &mut self,
+        expr: &Grouping<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         self.evaluate(&expr.expression)
     }
 
-    fn visit_literal_expr(&mut self, expr: &Literal) -> Result<LoxObject, LoxException> {
+    fn visit_literal_expr(
+        &mut self,
+        expr: &Literal,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         Ok(LoxObject::Literal(expr.value.clone()))
     }
 
-    fn visit_unary_expr(&mut self, expr: &Unary) -> Result<LoxObject, LoxException> {
+    fn visit_unary_expr(
+        &mut self,
+        expr: &Unary<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let right = self.evaluate(&expr.right)?;
 
         match expr.operator.token_type {
@@ -260,7 +273,10 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
-    fn visit_ternary_expr(&mut self, expr: &Ternary) -> Result<LoxObject, LoxException> {
+    fn visit_ternary_expr(
+        &mut self,
+        expr: &Ternary<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let condition = self.evaluate(&expr.condition)?;
         match self.is_truthy(&condition) {
             true => self.evaluate(&expr.left),
@@ -268,11 +284,17 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
-    fn visit_variable_expr(&mut self, expr: &Variable) -> Result<LoxObject, LoxException> {
+    fn visit_variable_expr(
+        &mut self,
+        expr: &Variable<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         self.look_up_variable(&expr.name)
     }
 
-    fn visit_assign_expr(&mut self, expr: &Assign) -> Result<LoxObject, LoxException> {
+    fn visit_assign_expr(
+        &mut self,
+        expr: &Assign<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let value = self.evaluate(&expr.value)?;
         match self.locals.get(&expr.name) {
             Some(&distance) => Ok(self
@@ -283,7 +305,10 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
-    fn visit_logical_expr(&mut self, expr: &Logical) -> Result<LoxObject, LoxException> {
+    fn visit_logical_expr(
+        &mut self,
+        expr: &Logical<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let left = self.evaluate(&expr.left)?;
 
         match expr.operator.token_type {
@@ -293,7 +318,10 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
-    fn visit_call_expr(&mut self, expr: &Call) -> Result<LoxObject, LoxException> {
+    fn visit_call_expr(
+        &mut self,
+        expr: &Call<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let callee = self.evaluate(&expr.callee)?;
 
         let mut arguments = Vec::new();
@@ -322,10 +350,12 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
-    fn visit_get_expr(&mut self, expr: &Get) -> Result<LoxObject, LoxException> {
+    fn visit_get_expr(&mut self, expr: &Get<'src>) -> Result<LoxObject<'src>, LoxException<'src>> {
         let object = self.evaluate(&expr.object)?;
         match object {
-            LoxObject::Instance(instance) => instance.borrow().get(&expr.name, &instance),
+            LoxObject::Instance(instance) => {
+                instance.borrow().get(&expr.name, Rc::clone(&instance))
+            }
             _ => Err(LoxException::RuntimeError(RuntimeError::new(
                 expr.name.line,
                 String::from("Only instances have properties."),
@@ -333,7 +363,7 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
-    fn visit_set_expr(&mut self, expr: &Set) -> Result<LoxObject, LoxException> {
+    fn visit_set_expr(&mut self, expr: &Set<'src>) -> Result<LoxObject<'src>, LoxException<'src>> {
         let object = self.evaluate(&expr.object)?;
         match object {
             LoxObject::Instance(instance) => {
@@ -347,11 +377,14 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
         }
     }
 
-    fn visit_this_expr(&mut self, expr: &This) -> Result<LoxObject, LoxException> {
+    fn visit_this_expr(
+        &mut self,
+        expr: &This<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         self.look_up_variable(&expr.keyword)
     }
 
-    fn visit_super_expr(&mut self, expr: &Super) -> Result<LoxObject, LoxException> {
+    fn visit_super_expr(&mut self, expr: &Super) -> Result<LoxObject<'src>, LoxException<'src>> {
         let distance = self
             .locals
             .get(&expr.keyword)
@@ -360,13 +393,13 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
 
         let object = self.environment.borrow().get_at(*distance - 1, "this");
         let instance = match object {
-            LoxObject::Instance(ref instance) => instance,
+            LoxObject::Instance(instance) => instance,
             _ => unreachable!(),
         };
 
         let method = match superclass {
             LoxObject::Callable(LoxCallable::Class(ref class)) => {
-                class.find_method(&expr.method.lexeme)
+                class.find_method(expr.method.lexeme)
             }
             _ => unreachable!(),
         };
@@ -376,30 +409,33 @@ impl ExprVisitor<Result<LoxObject, LoxException>> for Interpreter {
             )))),
             None => Err(LoxException::RuntimeError(RuntimeError::new(
                 expr.method.line,
-                format!("Undefined property '{}'.", &expr.method.lexeme),
+                format!("Undefined property '{}'.", expr.method.lexeme),
             ))),
         }
     }
 
-    fn visit_closure_expr(&mut self, expr: &Closure) -> Result<LoxObject, LoxException> {
+    fn visit_closure_expr(
+        &mut self,
+        expr: &Closure<'src>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let closure = LoxFunction::new(expr, Rc::clone(&self.environment), None, false);
         Ok(LoxObject::Callable(LoxCallable::Function(Rc::new(closure))))
     }
 }
 
-impl StmtVisitor<Result<(), LoxException>> for Interpreter {
-    fn visit_expression_stmt(&mut self, stmt: &Expression) -> Result<(), LoxException> {
+impl<'src> StmtVisitor<'src, Result<(), LoxException<'src>>> for Interpreter<'src> {
+    fn visit_expression_stmt(&mut self, stmt: &Expression<'src>) -> Result<(), LoxException<'src>> {
         self.evaluate(&stmt.expression)?;
         Ok(())
     }
 
-    fn visit_print_stmt(&mut self, stmt: &Print) -> Result<(), LoxException> {
+    fn visit_print_stmt(&mut self, stmt: &Print<'src>) -> Result<(), LoxException<'src>> {
         let value = self.evaluate(&stmt.expression)?;
         println!("{value}");
         Ok(())
     }
 
-    fn visit_var_stmt(&mut self, stmt: &Var) -> Result<(), LoxException> {
+    fn visit_var_stmt(&mut self, stmt: &Var<'src>) -> Result<(), LoxException<'src>> {
         let value = match stmt.initializer {
             Some(ref expr) => self.evaluate(expr)?,
             None => LoxObject::Literal(LoxLiteral::Nil),
@@ -407,18 +443,18 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
 
         self.environment
             .borrow_mut()
-            .define(stmt.name.lexeme.clone(), value);
+            .define(stmt.name.lexeme, value);
         Ok(())
     }
 
-    fn visit_block_stmt(&mut self, stmt: &Block) -> Result<(), LoxException> {
+    fn visit_block_stmt(&mut self, stmt: &Block<'src>) -> Result<(), LoxException<'src>> {
         let environment = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
             &self.environment,
         )))));
         self.execute_block(&stmt.statements, environment)
     }
 
-    fn visit_if_stmt(&mut self, stmt: &If) -> Result<(), LoxException> {
+    fn visit_if_stmt(&mut self, stmt: &If<'src>) -> Result<(), LoxException<'src>> {
         let condition_value = self.evaluate(&stmt.condition)?;
 
         if self.is_truthy(&condition_value) {
@@ -430,7 +466,7 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
         Ok(())
     }
 
-    fn visit_while_stmt(&mut self, stmt: &While) -> Result<(), LoxException> {
+    fn visit_while_stmt(&mut self, stmt: &While<'src>) -> Result<(), LoxException<'src>> {
         loop {
             let condition_value = self.evaluate(&stmt.condition)?;
             if !self.is_truthy(&condition_value) {
@@ -445,17 +481,17 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
         Ok(())
     }
 
-    fn visit_break_stmt(&mut self) -> Result<(), LoxException> {
+    fn visit_break_stmt(&mut self) -> Result<(), LoxException<'src>> {
         self.active_break = true;
         Ok(())
     }
 
-    fn visit_function_stmt(&mut self, stmt: &Function) -> Result<(), LoxException> {
-        let function_name = stmt.name.lexeme.clone();
+    fn visit_function_stmt(&mut self, stmt: &Function<'src>) -> Result<(), LoxException<'src>> {
+        let function_name = stmt.name.lexeme;
         let function = LoxFunction::new(
             &stmt.closure,
             Rc::clone(&self.environment),
-            Some(function_name.clone()),
+            Some(function_name),
             false,
         );
         self.environment.borrow_mut().define(
@@ -465,12 +501,12 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
         Ok(())
     }
 
-    fn visit_return_stmt(&mut self, stmt: &Return) -> Result<(), LoxException> {
+    fn visit_return_stmt(&mut self, stmt: &Return<'src>) -> Result<(), LoxException<'src>> {
         let value = self.evaluate(&stmt.value)?;
         Err(LoxException::Return(value))
     }
 
-    fn visit_class_stmt(&mut self, stmt: &Class) -> Result<(), LoxException> {
+    fn visit_class_stmt(&mut self, stmt: &Class<'src>) -> Result<(), LoxException<'src>> {
         let mut superclass = None;
         if let Some(ref superclass_expr) = stmt.superclass {
             let superclass_err = LoxException::RuntimeError(RuntimeError::new(
@@ -493,17 +529,17 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
             }
         }
 
-        let class_name = stmt.name.lexeme.clone();
+        let class_name = stmt.name.lexeme;
         self.environment
             .borrow_mut()
-            .define(class_name.clone(), LoxObject::Literal(LoxLiteral::Nil));
+            .define(class_name, LoxObject::Literal(LoxLiteral::Nil));
 
         if superclass.is_some() {
             self.environment = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
                 &self.environment,
             )))));
             self.environment.borrow_mut().define(
-                String::from("super"),
+                "super",
                 LoxObject::Callable(LoxCallable::Class(Rc::clone(superclass.as_ref().unwrap()))),
             );
         }
@@ -511,11 +547,11 @@ impl StmtVisitor<Result<(), LoxException>> for Interpreter {
         let mut methods = HashMap::new();
         for method in stmt.methods.iter() {
             if let Stmt::Function(function) = method {
-                let method_name = function.name.lexeme.clone();
+                let method_name = function.name.lexeme;
                 let lox_fun = LoxFunction::new(
                     &function.closure,
                     Rc::clone(&self.environment),
-                    Some(method_name.clone()),
+                    Some(method_name),
                     method_name == "init",
                 );
                 methods.insert(method_name, lox_fun);

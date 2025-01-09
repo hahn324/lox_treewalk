@@ -3,35 +3,35 @@ use crate::{
     token::Token,
 };
 
-pub trait StmtVisitor<T> {
-    fn visit_expression_stmt(&mut self, stmt: &Expression) -> T;
-    fn visit_print_stmt(&mut self, stmt: &Print) -> T;
-    fn visit_var_stmt(&mut self, stmt: &Var) -> T;
-    fn visit_block_stmt(&mut self, stmt: &Block) -> T;
-    fn visit_if_stmt(&mut self, stmt: &If) -> T;
-    fn visit_while_stmt(&mut self, stmt: &While) -> T;
+pub trait StmtVisitor<'src, T> {
+    fn visit_expression_stmt(&mut self, stmt: &Expression<'src>) -> T;
+    fn visit_print_stmt(&mut self, stmt: &Print<'src>) -> T;
+    fn visit_var_stmt(&mut self, stmt: &Var<'src>) -> T;
+    fn visit_block_stmt(&mut self, stmt: &Block<'src>) -> T;
+    fn visit_if_stmt(&mut self, stmt: &If<'src>) -> T;
+    fn visit_while_stmt(&mut self, stmt: &While<'src>) -> T;
     fn visit_break_stmt(&mut self) -> T;
-    fn visit_function_stmt(&mut self, stmt: &Function) -> T;
-    fn visit_return_stmt(&mut self, stmt: &Return) -> T;
-    fn visit_class_stmt(&mut self, stmt: &Class) -> T;
+    fn visit_function_stmt(&mut self, stmt: &Function<'src>) -> T;
+    fn visit_return_stmt(&mut self, stmt: &Return<'src>) -> T;
+    fn visit_class_stmt(&mut self, stmt: &Class<'src>) -> T;
 }
 
 #[derive(Debug, Clone)]
-pub enum Stmt {
-    Expression(Expression),
-    Print(Print),
-    Var(Var),
-    Block(Block),
-    If(If),
-    While(While),
+pub enum Stmt<'src> {
+    Expression(Expression<'src>),
+    Print(Print<'src>),
+    Var(Var<'src>),
+    Block(Block<'src>),
+    If(If<'src>),
+    While(While<'src>),
     Break,
-    Function(Function),
-    Return(Return),
-    Class(Class),
+    Function(Function<'src>),
+    Return(Return<'src>),
+    Class(Class<'src>),
 }
 
-impl Stmt {
-    pub fn accept<T>(&self, visitor: &mut dyn StmtVisitor<T>) -> T {
+impl<'src> Stmt<'src> {
+    pub fn accept<T>(&self, visitor: &mut dyn StmtVisitor<'src, T>) -> T {
         match self {
             Stmt::Expression(expression) => visitor.visit_expression_stmt(expression),
             Stmt::Print(print) => visitor.visit_print_stmt(print),
@@ -49,54 +49,58 @@ impl Stmt {
 
 // Statement Types
 #[derive(Debug, Clone)]
-pub struct Expression {
-    pub expression: Expr,
+pub struct Expression<'src> {
+    pub expression: Expr<'src>,
 }
-impl Expression {
-    pub fn new(expression: Expr) -> Self {
+impl<'src> Expression<'src> {
+    pub fn new(expression: Expr<'src>) -> Self {
         Expression { expression }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Print {
-    pub expression: Expr,
+pub struct Print<'src> {
+    pub expression: Expr<'src>,
 }
-impl Print {
-    pub fn new(expression: Expr) -> Self {
+impl<'src> Print<'src> {
+    pub fn new(expression: Expr<'src>) -> Self {
         Print { expression }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Var {
-    pub name: Token,
-    pub initializer: Option<Expr>,
+pub struct Var<'src> {
+    pub name: Token<'src>,
+    pub initializer: Option<Expr<'src>>,
 }
-impl Var {
-    pub fn new(name: Token, initializer: Option<Expr>) -> Self {
+impl<'src> Var<'src> {
+    pub fn new(name: Token<'src>, initializer: Option<Expr<'src>>) -> Self {
         Var { name, initializer }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Block {
-    pub statements: Vec<Stmt>,
+pub struct Block<'src> {
+    pub statements: Vec<Stmt<'src>>,
 }
-impl Block {
-    pub fn new(statements: Vec<Stmt>) -> Self {
+impl<'src> Block<'src> {
+    pub fn new(statements: Vec<Stmt<'src>>) -> Self {
         Block { statements }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct If {
-    pub condition: Expr,
-    pub then_branch: Box<Stmt>,
-    pub else_branch: Option<Box<Stmt>>,
+pub struct If<'src> {
+    pub condition: Expr<'src>,
+    pub then_branch: Box<Stmt<'src>>,
+    pub else_branch: Option<Box<Stmt<'src>>>,
 }
-impl If {
-    pub fn new(condition: Expr, then_branch: Box<Stmt>, else_branch: Option<Box<Stmt>>) -> Self {
+impl<'src> If<'src> {
+    pub fn new(
+        condition: Expr<'src>,
+        then_branch: Box<Stmt<'src>>,
+        else_branch: Option<Box<Stmt<'src>>>,
+    ) -> Self {
         If {
             condition,
             then_branch,
@@ -106,51 +110,55 @@ impl If {
 }
 
 #[derive(Debug, Clone)]
-pub struct While {
-    pub condition: Expr,
-    pub body: Box<Stmt>,
+pub struct While<'src> {
+    pub condition: Expr<'src>,
+    pub body: Box<Stmt<'src>>,
 }
-impl While {
-    pub fn new(condition: Expr, body: Box<Stmt>) -> Self {
+impl<'src> While<'src> {
+    pub fn new(condition: Expr<'src>, body: Box<Stmt<'src>>) -> Self {
         While { condition, body }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Function {
-    pub name: Token,
-    pub closure: Closure,
+pub struct Function<'src> {
+    pub name: Token<'src>,
+    pub closure: Closure<'src>,
 }
-impl Function {
-    pub fn new(name: Token, closure: Closure) -> Self {
+impl<'src> Function<'src> {
+    pub fn new(name: Token<'src>, closure: Closure<'src>) -> Self {
         Function { name, closure }
     }
 }
-impl PartialEq for Function {
+impl<'src> PartialEq for Function<'src> {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Return {
-    pub keyword: Token,
-    pub value: Expr,
+pub struct Return<'src> {
+    pub keyword: Token<'src>,
+    pub value: Expr<'src>,
 }
-impl Return {
-    pub fn new(keyword: Token, value: Expr) -> Self {
+impl<'src> Return<'src> {
+    pub fn new(keyword: Token<'src>, value: Expr<'src>) -> Self {
         Return { keyword, value }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Class {
-    pub name: Token,
-    pub superclass: Option<Box<Expr>>,
-    pub methods: Vec<Stmt>,
+pub struct Class<'src> {
+    pub name: Token<'src>,
+    pub superclass: Option<Box<Expr<'src>>>,
+    pub methods: Vec<Stmt<'src>>,
 }
-impl Class {
-    pub fn new(name: Token, superclass: Option<Box<Expr>>, methods: Vec<Stmt>) -> Self {
+impl<'src> Class<'src> {
+    pub fn new(
+        name: Token<'src>,
+        superclass: Option<Box<Expr<'src>>>,
+        methods: Vec<Stmt<'src>>,
+    ) -> Self {
         Class {
             name,
             superclass,

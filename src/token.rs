@@ -5,18 +5,18 @@ use std::{
 };
 
 #[derive(Debug, Clone, Default)]
-pub struct Token {
+pub struct Token<'src> {
     pub token_type: TokenType,
-    pub lexeme: String,
+    pub lexeme: &'src str,
     pub literal: Option<LoxLiteral>,
     pub line: usize,
     token_id: usize,
 }
 
-impl Token {
+impl<'src> Token<'src> {
     pub fn new(
         token_type: TokenType,
-        lexeme: String,
+        lexeme: &'src str,
         literal: Option<LoxLiteral>,
         line: usize,
         token_id: usize,
@@ -31,7 +31,7 @@ impl Token {
     }
 }
 
-impl fmt::Display for Token {
+impl fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -41,15 +41,15 @@ impl fmt::Display for Token {
     }
 }
 
-impl PartialEq for Token {
+impl PartialEq for Token<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.token_id == other.token_id
     }
 }
 
-impl Eq for Token {}
+impl Eq for Token<'_> {}
 
-impl Hash for Token {
+impl Hash for Token<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.token_id.hash(state);
     }

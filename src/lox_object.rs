@@ -21,13 +21,13 @@ impl fmt::Display for LoxLiteral {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LoxObject {
+pub enum LoxObject<'src> {
     Literal(LoxLiteral),
-    Callable(LoxCallable),
-    Instance(Rc<RefCell<LoxInstance>>),
+    Callable(LoxCallable<'src>),
+    Instance(Rc<RefCell<LoxInstance<'src>>>),
 }
 
-impl fmt::Display for LoxObject {
+impl fmt::Display for LoxObject<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LoxObject::Literal(literal) => write!(f, "{literal}"),

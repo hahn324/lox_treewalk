@@ -2,14 +2,14 @@ use crate::{interpreter::Interpreter, lox_exception::LoxException, lox_object::L
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct NativeFunction {
-    function: fn(&mut Interpreter, Vec<LoxObject>) -> LoxObject,
+pub struct NativeFunction<'src> {
+    function: fn(&mut Interpreter<'src>, Vec<LoxObject<'src>>) -> LoxObject<'src>,
     arity: usize,
     repr: String,
 }
-impl NativeFunction {
+impl<'src> NativeFunction<'src> {
     pub fn new(
-        function: fn(&mut Interpreter, Vec<LoxObject>) -> LoxObject,
+        function: fn(&mut Interpreter<'src>, Vec<LoxObject<'src>>) -> LoxObject<'src>,
         arity: usize,
         repr: String,
     ) -> Self {
@@ -26,14 +26,14 @@ impl NativeFunction {
 
     pub fn call(
         &self,
-        interpreter: &mut Interpreter,
-        arguments: Vec<LoxObject>,
-    ) -> Result<LoxObject, LoxException> {
+        interpreter: &mut Interpreter<'src>,
+        arguments: Vec<LoxObject<'src>>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         Ok((self.function)(interpreter, arguments))
     }
 }
 
-impl fmt::Display for NativeFunction {
+impl<'src> fmt::Display for NativeFunction<'src> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.repr)
     }

@@ -26,15 +26,15 @@ enum ClassType {
     Subclass,
 }
 
-pub struct Resolver<'interpreter> {
-    interpreter: &'interpreter mut Interpreter,
-    scopes: Vec<HashMap<String, bool>>,
+pub struct Resolver<'interpreter, 'src> {
+    interpreter: &'interpreter mut Interpreter<'src>,
+    scopes: Vec<HashMap<&'src str, bool>>,
     current_function: FunctionType,
     current_class: ClassType,
     pub had_error: bool,
 }
-impl<'interpreter> Resolver<'interpreter> {
-    pub fn new(interpreter: &'interpreter mut Interpreter) -> Self {
+impl<'interpreter, 'src> Resolver<'interpreter, 'src> {
+    pub fn new(interpreter: &'interpreter mut Interpreter<'src>) -> Self {
         Resolver {
             interpreter,
             scopes: Vec::new(),
@@ -49,7 +49,7 @@ impl<'interpreter> Resolver<'interpreter> {
         report(line, loc, message);
     }
 
-    fn get_cur_scope(&mut self) -> &mut HashMap<String, bool> {
+    fn get_cur_scope(&mut self) -> &mut HashMap<&'src str, bool> {
         let cur_scope_idx = self.scopes.len() - 1;
         &mut self.scopes[cur_scope_idx]
     }
@@ -62,15 +62,15 @@ impl<'interpreter> Resolver<'interpreter> {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, name: &Token) {
+    fn declare(&mut self, name: &Token<'src>) {
         if self.scopes.is_empty() {
             return;
         }
 
         let scope = self.get_cur_scope();
-        let already_declared = scope.contains_key(&name.lexeme);
+        let already_declared = scope.contains_key(name.lexeme);
 
-        scope.insert(name.lexeme.clone(), false);
+        scope.insert(name.lexeme, false);
 
         if already_declared {
             self.resolver_error(
@@ -81,17 +81,17 @@ impl<'interpreter> Resolver<'interpreter> {
         }
     }
 
-    fn define(&mut self, name: &Token) {
+    fn define(&mut self, name: &Token<'src>) {
         if self.scopes.is_empty() {
             return;
         }
 
-        self.get_cur_scope().insert(name.lexeme.clone(), true);
+        self.get_cur_scope().insert(name.lexeme, true);
     }
 
-    fn resolve_local(&mut self, name: &Token) {
+    fn resolve_local(&mut self, name: &Token<'src>) {
         for idx in (0..self.scopes.len()).rev() {
-            if self.scopes[idx].contains_key(&name.lexeme) {
+            if self.scopes[idx].contains_key(name.lexeme) {
                 self.interpreter
                     .resolve(name.clone(), self.scopes.len() - 1 - idx);
                 return;
@@ -99,7 +99,7 @@ impl<'interpreter> Resolver<'interpreter> {
         }
     }
 
-    fn resolve_function(&mut self, closure: &Closure, function_type: FunctionType) {
+    fn resolve_function(&mut self, closure: &Closure<'src>, function_type: FunctionType) {
         let enclosing_function = self.current_function;
         self.current_function = function_type;
 
@@ -114,44 +114,44 @@ impl<'interpreter> Resolver<'interpreter> {
         self.current_function = enclosing_function;
     }
 
-    pub fn resolve_statements(&mut self, statements: &Vec<Stmt>) {
+    pub fn resolve_statements(&mut self, statements: &Vec<Stmt<'src>>) {
         for statement in statements {
             self.resolve_stmt(statement);
         }
     }
 
-    fn resolve_stmt(&mut self, stmt: &Stmt) {
+    fn resolve_stmt(&mut self, stmt: &Stmt<'src>) {
         stmt.accept(self);
     }
 
-    fn resolve_expr(&mut self, expr: &Expr) {
+    fn resolve_expr(&mut self, expr: &Expr<'src>) {
         expr.accept(self);
     }
 }
 
-impl<'interpreter> ExprVisitor<()> for Resolver<'interpreter> {
-    fn visit_binary_expr(&mut self, expr: &Binary) {
+impl<'interpreter, 'src> ExprVisitor<'src, ()> for Resolver<'interpreter, 'src> {
+    fn visit_binary_expr(&mut self, expr: &Binary<'src>) {
         self.resolve_expr(&expr.left);
         self.resolve_expr(&expr.right);
     }
 
-    fn visit_grouping_expr(&mut self, expr: &Grouping) {
+    fn visit_grouping_expr(&mut self, expr: &Grouping<'src>) {
         self.resolve_expr(&expr.expression);
     }
 
     fn visit_literal_expr(&mut self, _: &Literal) {}
 
-    fn visit_unary_expr(&mut self, expr: &Unary) {
+    fn visit_unary_expr(&mut self, expr: &Unary<'src>) {
         self.resolve_expr(&expr.right);
     }
 
-    fn visit_ternary_expr(&mut self, expr: &Ternary) {
+    fn visit_ternary_expr(&mut self, expr: &Ternary<'src>) {
         self.resolve_expr(&expr.condition);
         self.resolve_expr(&expr.left);
         self.resolve_expr(&expr.right);
     }
 
-    fn visit_variable_expr(&mut self, expr: &Variable) {
+    fn visit_variable_expr(&mut self, expr: &Variable<'src>) {
         if !self.scopes.is_empty() && self.get_cur_scope().get(&expr.name.lexeme) == Some(&false) {
             self.resolver_error(
                 expr.name.line,
@@ -163,33 +163,33 @@ impl<'interpreter> ExprVisitor<()> for Resolver<'interpreter> {
         self.resolve_local(&expr.name);
     }
 
-    fn visit_assign_expr(&mut self, expr: &Assign) {
+    fn visit_assign_expr(&mut self, expr: &Assign<'src>) {
         self.resolve_expr(&expr.value);
         self.resolve_local(&expr.name);
     }
 
-    fn visit_logical_expr(&mut self, expr: &Logical) {
+    fn visit_logical_expr(&mut self, expr: &Logical<'src>) {
         self.resolve_expr(&expr.left);
         self.resolve_expr(&expr.right);
     }
 
-    fn visit_call_expr(&mut self, expr: &Call) {
+    fn visit_call_expr(&mut self, expr: &Call<'src>) {
         self.resolve_expr(&expr.callee);
         for argument in expr.arguments.iter() {
             self.resolve_expr(argument);
         }
     }
 
-    fn visit_get_expr(&mut self, expr: &Get) {
+    fn visit_get_expr(&mut self, expr: &Get<'src>) {
         self.resolve_expr(&expr.object);
     }
 
-    fn visit_set_expr(&mut self, expr: &Set) -> () {
+    fn visit_set_expr(&mut self, expr: &Set<'src>) -> () {
         self.resolve_expr(&expr.value);
         self.resolve_expr(&expr.object);
     }
 
-    fn visit_this_expr(&mut self, expr: &This) {
+    fn visit_this_expr(&mut self, expr: &This<'src>) {
         if self.current_class == ClassType::None {
             self.resolver_error(
                 expr.keyword.line,
@@ -201,7 +201,7 @@ impl<'interpreter> ExprVisitor<()> for Resolver<'interpreter> {
         self.resolve_local(&expr.keyword);
     }
 
-    fn visit_super_expr(&mut self, expr: &Super) {
+    fn visit_super_expr(&mut self, expr: &Super<'src>) {
         match self.current_class {
             ClassType::None => self.resolver_error(
                 expr.keyword.line,
@@ -217,21 +217,21 @@ impl<'interpreter> ExprVisitor<()> for Resolver<'interpreter> {
         }
     }
 
-    fn visit_closure_expr(&mut self, expr: &Closure) {
+    fn visit_closure_expr(&mut self, expr: &Closure<'src>) {
         self.resolve_function(expr, FunctionType::Function);
     }
 }
 
-impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
-    fn visit_expression_stmt(&mut self, stmt: &Expression) {
+impl<'interpreter, 'src> StmtVisitor<'src, ()> for Resolver<'interpreter, 'src> {
+    fn visit_expression_stmt(&mut self, stmt: &Expression<'src>) {
         self.resolve_expr(&stmt.expression);
     }
 
-    fn visit_print_stmt(&mut self, stmt: &Print) {
+    fn visit_print_stmt(&mut self, stmt: &Print<'src>) {
         self.resolve_expr(&stmt.expression);
     }
 
-    fn visit_var_stmt(&mut self, stmt: &Var) {
+    fn visit_var_stmt(&mut self, stmt: &Var<'src>) {
         self.declare(&stmt.name);
         if let Some(ref initializer) = stmt.initializer {
             self.resolve_expr(initializer);
@@ -239,13 +239,13 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
         self.define(&stmt.name);
     }
 
-    fn visit_block_stmt(&mut self, stmt: &Block) {
+    fn visit_block_stmt(&mut self, stmt: &Block<'src>) {
         self.begin_scope();
         self.resolve_statements(&stmt.statements);
         self.end_scope();
     }
 
-    fn visit_if_stmt(&mut self, stmt: &If) {
+    fn visit_if_stmt(&mut self, stmt: &If<'src>) {
         self.resolve_expr(&stmt.condition);
         self.resolve_stmt(&stmt.then_branch);
         if let Some(ref else_stmt) = stmt.else_branch {
@@ -253,21 +253,21 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
         }
     }
 
-    fn visit_while_stmt(&mut self, stmt: &While) {
+    fn visit_while_stmt(&mut self, stmt: &While<'src>) {
         self.resolve_expr(&stmt.condition);
         self.resolve_stmt(&stmt.body);
     }
 
     fn visit_break_stmt(&mut self) {}
 
-    fn visit_function_stmt(&mut self, stmt: &Function) {
+    fn visit_function_stmt(&mut self, stmt: &Function<'src>) {
         self.declare(&stmt.name);
         self.define(&stmt.name);
 
         self.resolve_function(&stmt.closure, FunctionType::Function);
     }
 
-    fn visit_return_stmt(&mut self, stmt: &Return) {
+    fn visit_return_stmt(&mut self, stmt: &Return<'src>) {
         if self.current_function == FunctionType::None {
             self.resolver_error(
                 stmt.keyword.line,
@@ -290,7 +290,7 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
         }
     }
 
-    fn visit_class_stmt(&mut self, stmt: &Class) {
+    fn visit_class_stmt(&mut self, stmt: &Class<'src>) {
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
@@ -310,11 +310,11 @@ impl<'interpreter> StmtVisitor<()> for Resolver<'interpreter> {
             self.current_class = ClassType::Subclass;
             self.resolve_expr(superclass);
             self.begin_scope();
-            self.get_cur_scope().insert(String::from("super"), true);
+            self.get_cur_scope().insert("super", true);
         }
 
         self.begin_scope();
-        self.get_cur_scope().insert(String::from("this"), true);
+        self.get_cur_scope().insert("this", true);
 
         for method in stmt.methods.iter() {
             if let Stmt::Function(function) = method {

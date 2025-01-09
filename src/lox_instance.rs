@@ -8,12 +8,12 @@ use crate::{
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LoxInstance {
-    klass: LoxClass,
-    fields: HashMap<String, LoxObject>,
+pub struct LoxInstance<'src> {
+    klass: LoxClass<'src>,
+    fields: HashMap<&'src str, LoxObject<'src>>,
 }
-impl LoxInstance {
-    pub fn new(klass: LoxClass) -> Self {
+impl<'src> LoxInstance<'src> {
+    pub fn new(klass: LoxClass<'src>) -> Self {
         LoxInstance {
             klass,
             fields: HashMap::new(),
@@ -22,14 +22,14 @@ impl LoxInstance {
 
     pub fn get(
         &self,
-        name: &Token,
-        instance: &Rc<RefCell<LoxInstance>>,
-    ) -> Result<LoxObject, LoxException> {
-        if self.fields.contains_key(&name.lexeme) {
-            return Ok(self.fields.get(&name.lexeme).unwrap().clone());
+        name: &Token<'src>,
+        instance: Rc<RefCell<LoxInstance<'src>>>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
+        if self.fields.contains_key(name.lexeme) {
+            return Ok(self.fields.get(name.lexeme).unwrap().clone());
         }
 
-        match self.klass.find_method(&name.lexeme) {
+        match self.klass.find_method(name.lexeme) {
             Some(method) => Ok(LoxObject::Callable(LoxCallable::Function(Rc::new(
                 method.bind(instance),
             )))),
@@ -40,13 +40,13 @@ impl LoxInstance {
         }
     }
 
-    pub fn set(&mut self, name: &Token, value: LoxObject) -> LoxObject {
-        self.fields.insert(name.lexeme.clone(), value.clone());
+    pub fn set(&mut self, name: &Token<'src>, value: LoxObject<'src>) -> LoxObject<'src> {
+        self.fields.insert(name.lexeme, value.clone());
         value
     }
 }
 
-impl fmt::Display for LoxInstance {
+impl<'src> fmt::Display for LoxInstance<'src> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} instance", self.klass.name)
     }

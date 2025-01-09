@@ -5,16 +5,16 @@ use crate::{
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LoxClass {
-    pub name: String,
-    pub superclass: Option<Rc<LoxClass>>,
-    pub methods: HashMap<String, LoxFunction>,
+pub struct LoxClass<'src> {
+    pub name: &'src str,
+    pub superclass: Option<Rc<LoxClass<'src>>>,
+    pub methods: HashMap<&'src str, LoxFunction<'src>>,
 }
-impl LoxClass {
+impl<'src> LoxClass<'src> {
     pub fn new(
-        name: String,
-        superclass: Option<Rc<LoxClass>>,
-        methods: HashMap<String, LoxFunction>,
+        name: &'src str,
+        superclass: Option<Rc<LoxClass<'src>>>,
+        methods: HashMap<&'src str, LoxFunction<'src>>,
     ) -> Self {
         LoxClass {
             name,
@@ -32,17 +32,19 @@ impl LoxClass {
 
     pub fn call(
         &self,
-        interpreter: &mut Interpreter,
-        arguments: Vec<LoxObject>,
-    ) -> Result<LoxObject, LoxException> {
+        interpreter: &mut Interpreter<'src>,
+        arguments: Vec<LoxObject<'src>>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let instance = Rc::new(RefCell::new(LoxInstance::new(self.clone())));
         if let Some(initializer) = self.find_method("init") {
-            initializer.bind(&instance).call(interpreter, arguments)?;
+            initializer
+                .bind(Rc::clone(&instance))
+                .call(interpreter, arguments)?;
         }
         Ok(LoxObject::Instance(instance))
     }
 
-    pub fn find_method(&self, name: &str) -> Option<&LoxFunction> {
+    pub fn find_method(&self, name: &str) -> Option<&LoxFunction<'src>> {
         if self.methods.contains_key(name) {
             return self.methods.get(name);
         }
@@ -54,7 +56,7 @@ impl LoxClass {
     }
 }
 
-impl fmt::Display for LoxClass {
+impl<'src> fmt::Display for LoxClass<'src> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
     }

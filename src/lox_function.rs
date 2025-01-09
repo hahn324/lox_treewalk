@@ -9,20 +9,20 @@ use crate::{
 use std::{cell::RefCell, fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LoxFunction {
-    declaration: Closure,
-    context: Rc<RefCell<Environment>>,
+pub struct LoxFunction<'src> {
+    declaration: Closure<'src>,
+    context: Rc<RefCell<Environment<'src>>>,
     arity: usize,
-    name: Option<String>,
+    name: Option<&'src str>,
     repr: String,
     is_initializer: bool,
 }
 
-impl LoxFunction {
+impl<'src> LoxFunction<'src> {
     pub fn new(
-        declaration: &Closure,
-        context: Rc<RefCell<Environment>>,
-        name: Option<String>,
+        declaration: &Closure<'src>,
+        context: Rc<RefCell<Environment<'src>>>,
+        name: Option<&'src str>,
         is_initializer: bool,
     ) -> Self {
         let arity = declaration.params.len();
@@ -46,16 +46,16 @@ impl LoxFunction {
 
     pub fn call(
         &self,
-        interpreter: &mut Interpreter,
-        arguments: Vec<LoxObject>,
-    ) -> Result<LoxObject, LoxException> {
+        interpreter: &mut Interpreter<'src>,
+        arguments: Vec<LoxObject<'src>>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         let environment = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(
             &self.context,
         )))));
         for (idx, value) in arguments.into_iter().enumerate() {
             environment
                 .borrow_mut()
-                .define(self.declaration.params[idx].lexeme.clone(), value);
+                .define(self.declaration.params[idx].lexeme, value);
         }
 
         match interpreter.execute_block(&self.declaration.body, environment) {
@@ -71,22 +71,19 @@ impl LoxFunction {
         }
     }
 
-    pub fn bind(&self, instance: &Rc<RefCell<LoxInstance>>) -> LoxFunction {
+    pub fn bind(&self, instance: Rc<RefCell<LoxInstance<'src>>>) -> LoxFunction<'src> {
         let mut environment = Environment::new(Some(Rc::clone(&self.context)));
-        environment.define(
-            String::from("this"),
-            LoxObject::Instance(Rc::clone(instance)),
-        );
+        environment.define("this", LoxObject::Instance(instance));
         LoxFunction::new(
             &self.declaration,
             Rc::new(RefCell::new(environment)),
-            self.name.clone(),
+            self.name,
             self.is_initializer,
         )
     }
 }
 
-impl fmt::Display for LoxFunction {
+impl<'src> fmt::Display for LoxFunction<'src> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.repr)
     }

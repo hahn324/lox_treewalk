@@ -14,14 +14,14 @@ use std::{iter::Peekable, vec::IntoIter};
 #[derive(Debug)]
 pub struct LoxParseError;
 
-pub struct Parser {
-    token_iter: Peekable<IntoIter<Token>>,
+pub struct Parser<'src> {
+    token_iter: Peekable<IntoIter<Token<'src>>>,
     had_error: bool,
     loop_level: u32,
 }
 
-impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+impl<'src> Parser<'src> {
+    pub fn new(tokens: Vec<Token<'src>>) -> Self {
         Parser {
             token_iter: tokens.into_iter().peekable(),
             had_error: false,
@@ -34,7 +34,7 @@ impl Parser {
         report(line, loc, message);
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Stmt>, LoxParseError> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt<'src>>, LoxParseError> {
         let mut statements = Vec::new();
         while !self.is_at_end() {
             if let Some(stmt) = self.declaration() {
@@ -48,7 +48,7 @@ impl Parser {
         }
     }
 
-    fn declaration(&mut self) -> Option<Stmt> {
+    fn declaration(&mut self) -> Option<Stmt<'src>> {
         let res = match self.peek_token_type() {
             TokenType::Var => {
                 // Consume the Var token.
@@ -80,7 +80,7 @@ impl Parser {
         }
     }
 
-    fn class_declaration(&mut self) -> Result<Stmt, LoxParseError> {
+    fn class_declaration(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         let name = self.consume(TokenType::Identifier, "Expect class name.")?;
 
         let mut superclass = None;
@@ -101,7 +101,7 @@ impl Parser {
         Ok(Stmt::Class(Class::new(name, superclass, methods)))
     }
 
-    fn var_declaration(&mut self) -> Result<Stmt, LoxParseError> {
+    fn var_declaration(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         let name = self.consume(TokenType::Identifier, "Expect variable name.")?;
 
         let mut initializer = None;
@@ -118,14 +118,14 @@ impl Parser {
         Ok(Stmt::Var(Var::new(name, initializer)))
     }
 
-    fn function(&mut self, kind: &str) -> Result<Stmt, LoxParseError> {
+    fn function(&mut self, kind: &str) -> Result<Stmt<'src>, LoxParseError> {
         let name = self.consume(TokenType::Identifier, &format!("Expect {kind} name."))?;
         let closure = self.closure(kind)?;
 
         Ok(Stmt::Function(Function::new(name, closure)))
     }
 
-    fn closure(&mut self, kind: &str) -> Result<Closure, LoxParseError> {
+    fn closure(&mut self, kind: &str) -> Result<Closure<'src>, LoxParseError> {
         self.consume(
             TokenType::LeftParen,
             &format!("Expect '(' after {kind} start."),
@@ -157,7 +157,7 @@ impl Parser {
         Ok(Closure::new(params, body))
     }
 
-    fn statement(&mut self) -> Result<Stmt, LoxParseError> {
+    fn statement(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         let token_types = [
             TokenType::Print,
             TokenType::LeftBrace,
@@ -183,7 +183,7 @@ impl Parser {
         }
     }
 
-    fn for_statement(&mut self) -> Result<Stmt, LoxParseError> {
+    fn for_statement(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
 
         let initializer_option = if self.check(&TokenType::Semicolon) {
@@ -230,7 +230,7 @@ impl Parser {
         Ok(body)
     }
 
-    fn while_statement(&mut self) -> Result<Stmt, LoxParseError> {
+    fn while_statement(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.")?;
         let condition = self.expression()?;
         self.consume(TokenType::RightParen, "Expect ')' after condition.")?;
@@ -242,7 +242,7 @@ impl Parser {
         Ok(Stmt::While(While::new(condition, body)))
     }
 
-    fn break_statement(&mut self) -> Result<Stmt, LoxParseError> {
+    fn break_statement(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         let stmt_end = self.consume(TokenType::Semicolon, "Expect ';' after 'break' statement.")?;
         if self.loop_level == 0 {
             self.parse_error(
@@ -254,13 +254,13 @@ impl Parser {
         Ok(Stmt::Break)
     }
 
-    fn print_statement(&mut self) -> Result<Stmt, LoxParseError> {
+    fn print_statement(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         let value = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Stmt::Print(Print::new(value)))
     }
 
-    fn return_statement(&mut self, keyword: Token) -> Result<Stmt, LoxParseError> {
+    fn return_statement(&mut self, keyword: Token<'src>) -> Result<Stmt<'src>, LoxParseError> {
         let mut value = Expr::Literal(Literal::new(LoxLiteral::Nil));
         if !self.check(&TokenType::Semicolon) {
             value = self.expression()?;
@@ -269,7 +269,7 @@ impl Parser {
         Ok(Stmt::Return(Return::new(keyword, value)))
     }
 
-    fn block(&mut self) -> Result<Vec<Stmt>, LoxParseError> {
+    fn block(&mut self) -> Result<Vec<Stmt<'src>>, LoxParseError> {
         let mut statements = Vec::new();
 
         while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
@@ -282,7 +282,7 @@ impl Parser {
         Ok(statements)
     }
 
-    fn if_statement(&mut self) -> Result<Stmt, LoxParseError> {
+    fn if_statement(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         self.consume(TokenType::LeftParen, "Expect '(' after 'if'.")?;
         let condition = self.expression()?;
         self.consume(TokenType::RightParen, "Expect ')' after 'if' condition.")?;
@@ -299,23 +299,23 @@ impl Parser {
         Ok(Stmt::If(If::new(condition, then_branch, else_branch)))
     }
 
-    fn expression_statement(&mut self) -> Result<Stmt, LoxParseError> {
+    fn expression_statement(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::Expression(Expression::new(expr)))
     }
 
-    fn closure_statement(&mut self) -> Result<Stmt, LoxParseError> {
+    fn closure_statement(&mut self) -> Result<Stmt<'src>, LoxParseError> {
         let closure = Expr::Closure(self.closure("closure")?);
         self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::Expression(Expression::new(closure)))
     }
 
-    fn expression(&mut self) -> Result<Expr, LoxParseError> {
+    fn expression(&mut self) -> Result<Expr<'src>, LoxParseError> {
         self.comma()
     }
 
-    fn comma(&mut self) -> Result<Expr, LoxParseError> {
+    fn comma(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.assignment()?;
 
         while let Some(operator) = self.match_token_type(&[TokenType::Comma]) {
@@ -326,7 +326,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn assignment(&mut self) -> Result<Expr, LoxParseError> {
+    fn assignment(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.closure_expression()?;
 
         if self.check(&TokenType::Equal) {
@@ -350,7 +350,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn closure_expression(&mut self) -> Result<Expr, LoxParseError> {
+    fn closure_expression(&mut self) -> Result<Expr<'src>, LoxParseError> {
         if self.check(&TokenType::Fun) {
             // Consume the Fun token
             self.advance();
@@ -360,7 +360,7 @@ impl Parser {
         }
     }
 
-    fn ternary(&mut self) -> Result<Expr, LoxParseError> {
+    fn ternary(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.or()?;
 
         if self.check(&TokenType::QuestionMark) {
@@ -378,7 +378,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn or(&mut self) -> Result<Expr, LoxParseError> {
+    fn or(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.and()?;
 
         while let Some(operator) = self.match_token_type(&[TokenType::Or]) {
@@ -389,7 +389,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn and(&mut self) -> Result<Expr, LoxParseError> {
+    fn and(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.equality()?;
 
         while let Some(operator) = self.match_token_type(&[TokenType::And]) {
@@ -400,7 +400,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn equality(&mut self) -> Result<Expr, LoxParseError> {
+    fn equality(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.comparison()?;
 
         let token_types = [TokenType::BangEqual, TokenType::EqualEqual];
@@ -412,7 +412,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> Result<Expr, LoxParseError> {
+    fn comparison(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.term()?;
 
         let token_types = [
@@ -429,7 +429,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn term(&mut self) -> Result<Expr, LoxParseError> {
+    fn term(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.factor()?;
 
         let token_types = [TokenType::Minus, TokenType::Plus];
@@ -441,7 +441,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn factor(&mut self) -> Result<Expr, LoxParseError> {
+    fn factor(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.binary_operator_error()?;
 
         let token_types = [TokenType::Slash, TokenType::Star];
@@ -453,7 +453,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn binary_operator_error(&mut self) -> Result<Expr, LoxParseError> {
+    fn binary_operator_error(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let token_types = [
             TokenType::Comma,
             TokenType::BangEqual,
@@ -487,7 +487,7 @@ impl Parser {
         }
     }
 
-    fn unary(&mut self) -> Result<Expr, LoxParseError> {
+    fn unary(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let token_types = [TokenType::Bang, TokenType::Minus];
         if let Some(operator) = self.match_token_type(&token_types) {
             let right = Box::new(self.unary()?);
@@ -496,7 +496,7 @@ impl Parser {
         self.call()
     }
 
-    fn call(&mut self) -> Result<Expr, LoxParseError> {
+    fn call(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let mut expr = self.primary()?;
 
         loop {
@@ -520,7 +520,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn finish_call(&mut self, callee: Expr) -> Result<Expr, LoxParseError> {
+    fn finish_call(&mut self, callee: Expr<'src>) -> Result<Expr<'src>, LoxParseError> {
         let mut arguments = Vec::new();
 
         if !self.check(&TokenType::RightParen) {
@@ -543,7 +543,7 @@ impl Parser {
         Ok(Expr::Call(Call::new(Box::new(callee), paren, arguments)))
     }
 
-    fn primary(&mut self) -> Result<Expr, LoxParseError> {
+    fn primary(&mut self) -> Result<Expr<'src>, LoxParseError> {
         let literal_token_types = [
             TokenType::False,
             TokenType::True,
@@ -584,7 +584,7 @@ impl Parser {
             // Will always be Some variant from peek since we never consume the last Eof token.
             let next_token = self.token_iter.peek().unwrap();
             let next_token_line = next_token.line;
-            let next_token_lexeme = next_token.lexeme.clone();
+            let next_token_lexeme = next_token.lexeme;
             self.parse_error(
                 next_token_line,
                 &format!("at '{}'", next_token_lexeme),
@@ -595,7 +595,11 @@ impl Parser {
         }
     }
 
-    fn consume(&mut self, token_type: TokenType, message: &str) -> Result<Token, LoxParseError> {
+    fn consume(
+        &mut self,
+        token_type: TokenType,
+        message: &str,
+    ) -> Result<Token<'src>, LoxParseError> {
         match self.check(&token_type) {
             // Will always be Some variant in true arm of this match.
             true => Ok(self.advance().unwrap()),
@@ -603,7 +607,7 @@ impl Parser {
                 // Will always be Some variant from peek since we never consume the last Eof token.
                 let next_token = self.token_iter.peek().unwrap();
                 let next_token_line = next_token.line;
-                let next_token_lexeme = next_token.lexeme.clone();
+                let next_token_lexeme = next_token.lexeme;
                 match next_token.token_type {
                     TokenType::Eof => self.parse_error(next_token_line, "at end", message),
                     _ => self.parse_error(
@@ -617,7 +621,7 @@ impl Parser {
         }
     }
 
-    fn match_token_type(&mut self, token_types: &[TokenType]) -> Option<Token> {
+    fn match_token_type(&mut self, token_types: &[TokenType]) -> Option<Token<'src>> {
         for token_type in token_types {
             if self.check(token_type) {
                 return self.advance();
@@ -633,7 +637,7 @@ impl Parser {
         }
     }
 
-    fn advance(&mut self) -> Option<Token> {
+    fn advance(&mut self) -> Option<Token<'src>> {
         match self.is_at_end() {
             true => None,
             false => self.token_iter.next(),

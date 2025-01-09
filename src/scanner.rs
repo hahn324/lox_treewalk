@@ -1,11 +1,11 @@
 use crate::{lox_object::LoxLiteral, report, token::Token, token_type::TokenType};
 use std::{collections::HashMap, iter::Peekable, rc::Rc, str::Chars};
 
-pub struct Scanner<'a> {
-    pub tokens: Vec<Token>,
+pub struct Scanner<'src> {
+    pub tokens: Vec<Token<'src>>,
     pub had_error: bool,
-    source: &'a str,
-    source_iter: Peekable<Chars<'a>>,
+    source: &'src str,
+    source_iter: Peekable<Chars<'src>>,
     start: usize,
     current: usize,
     line: usize,
@@ -13,8 +13,8 @@ pub struct Scanner<'a> {
     next_token_id: usize,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl<'src> Scanner<'src> {
+    pub fn new(source: &'src str) -> Self {
         let mut keywords = HashMap::with_capacity(16);
         keywords.insert("and", TokenType::And);
         keywords.insert("class", TokenType::Class);
@@ -57,7 +57,7 @@ impl<'a> Scanner<'a> {
 
         self.tokens.push(Token::new(
             TokenType::Eof,
-            String::new(),
+            "",
             None,
             self.line,
             self.next_token_id,
@@ -127,7 +127,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn add_token(&mut self, token_type: TokenType, literal: Option<LoxLiteral>) {
-        let text = String::from(&self.source[self.start..self.current]);
+        let text = &self.source[self.start..self.current];
         self.tokens.push(Token::new(
             token_type,
             text,

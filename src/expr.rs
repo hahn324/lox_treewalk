@@ -1,42 +1,42 @@
 use crate::{lox_object::LoxLiteral, stmt::Stmt, token::Token};
 
-pub trait ExprVisitor<T> {
-    fn visit_binary_expr(&mut self, expr: &Binary) -> T;
-    fn visit_grouping_expr(&mut self, expr: &Grouping) -> T;
+pub trait ExprVisitor<'src, T> {
+    fn visit_binary_expr(&mut self, expr: &Binary<'src>) -> T;
+    fn visit_grouping_expr(&mut self, expr: &Grouping<'src>) -> T;
     fn visit_literal_expr(&mut self, expr: &Literal) -> T;
-    fn visit_unary_expr(&mut self, expr: &Unary) -> T;
-    fn visit_ternary_expr(&mut self, expr: &Ternary) -> T;
-    fn visit_variable_expr(&mut self, expr: &Variable) -> T;
-    fn visit_assign_expr(&mut self, expr: &Assign) -> T;
-    fn visit_logical_expr(&mut self, expr: &Logical) -> T;
-    fn visit_call_expr(&mut self, expr: &Call) -> T;
-    fn visit_closure_expr(&mut self, expr: &Closure) -> T;
-    fn visit_get_expr(&mut self, expr: &Get) -> T;
-    fn visit_set_expr(&mut self, expr: &Set) -> T;
-    fn visit_this_expr(&mut self, expr: &This) -> T;
-    fn visit_super_expr(&mut self, expr: &Super) -> T;
+    fn visit_unary_expr(&mut self, expr: &Unary<'src>) -> T;
+    fn visit_ternary_expr(&mut self, expr: &Ternary<'src>) -> T;
+    fn visit_variable_expr(&mut self, expr: &Variable<'src>) -> T;
+    fn visit_assign_expr(&mut self, expr: &Assign<'src>) -> T;
+    fn visit_logical_expr(&mut self, expr: &Logical<'src>) -> T;
+    fn visit_call_expr(&mut self, expr: &Call<'src>) -> T;
+    fn visit_closure_expr(&mut self, expr: &Closure<'src>) -> T;
+    fn visit_get_expr(&mut self, expr: &Get<'src>) -> T;
+    fn visit_set_expr(&mut self, expr: &Set<'src>) -> T;
+    fn visit_this_expr(&mut self, expr: &This<'src>) -> T;
+    fn visit_super_expr(&mut self, expr: &Super<'src>) -> T;
 }
 
 #[derive(Debug, Clone)]
-pub enum Expr {
-    Binary(Binary),
-    Grouping(Grouping),
+pub enum Expr<'src> {
+    Binary(Binary<'src>),
+    Grouping(Grouping<'src>),
     Literal(Literal),
-    Unary(Unary),
-    Ternary(Ternary),
-    Variable(Variable),
-    Assign(Assign),
-    Logical(Logical),
-    Call(Call),
-    Closure(Closure),
-    Get(Get),
-    Set(Set),
-    This(This),
-    Super(Super),
+    Unary(Unary<'src>),
+    Ternary(Ternary<'src>),
+    Variable(Variable<'src>),
+    Assign(Assign<'src>),
+    Logical(Logical<'src>),
+    Call(Call<'src>),
+    Closure(Closure<'src>),
+    Get(Get<'src>),
+    Set(Set<'src>),
+    This(This<'src>),
+    Super(Super<'src>),
 }
 
-impl Expr {
-    pub fn accept<T>(&self, visitor: &mut dyn ExprVisitor<T>) -> T {
+impl<'src> Expr<'src> {
+    pub fn accept<T>(&self, visitor: &mut dyn ExprVisitor<'src, T>) -> T {
         match self {
             Expr::Binary(binary) => visitor.visit_binary_expr(binary),
             Expr::Grouping(grouping) => visitor.visit_grouping_expr(grouping),
@@ -58,13 +58,13 @@ impl Expr {
 
 // Expression Types
 #[derive(Debug, Clone)]
-pub struct Binary {
-    pub left: Box<Expr>,
-    pub operator: Token,
-    pub right: Box<Expr>,
+pub struct Binary<'src> {
+    pub left: Box<Expr<'src>>,
+    pub operator: Token<'src>,
+    pub right: Box<Expr<'src>>,
 }
-impl Binary {
-    pub fn new(left: Box<Expr>, operator: Token, right: Box<Expr>) -> Self {
+impl<'src> Binary<'src> {
+    pub fn new(left: Box<Expr<'src>>, operator: Token<'src>, right: Box<Expr<'src>>) -> Self {
         Binary {
             left,
             operator,
@@ -74,11 +74,11 @@ impl Binary {
 }
 
 #[derive(Debug, Clone)]
-pub struct Grouping {
-    pub expression: Box<Expr>,
+pub struct Grouping<'src> {
+    pub expression: Box<Expr<'src>>,
 }
-impl Grouping {
-    pub fn new(expression: Box<Expr>) -> Self {
+impl<'src> Grouping<'src> {
+    pub fn new(expression: Box<Expr<'src>>) -> Self {
         Grouping { expression }
     }
 }
@@ -94,24 +94,24 @@ impl Literal {
 }
 
 #[derive(Debug, Clone)]
-pub struct Unary {
-    pub operator: Token,
-    pub right: Box<Expr>,
+pub struct Unary<'src> {
+    pub operator: Token<'src>,
+    pub right: Box<Expr<'src>>,
 }
-impl Unary {
-    pub fn new(operator: Token, right: Box<Expr>) -> Self {
+impl<'src> Unary<'src> {
+    pub fn new(operator: Token<'src>, right: Box<Expr<'src>>) -> Self {
         Unary { operator, right }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Ternary {
-    pub condition: Box<Expr>,
-    pub left: Box<Expr>,
-    pub right: Box<Expr>,
+pub struct Ternary<'src> {
+    pub condition: Box<Expr<'src>>,
+    pub left: Box<Expr<'src>>,
+    pub right: Box<Expr<'src>>,
 }
-impl Ternary {
-    pub fn new(condition: Box<Expr>, left: Box<Expr>, right: Box<Expr>) -> Self {
+impl<'src> Ternary<'src> {
+    pub fn new(condition: Box<Expr<'src>>, left: Box<Expr<'src>>, right: Box<Expr<'src>>) -> Self {
         Ternary {
             condition,
             left,
@@ -121,34 +121,34 @@ impl Ternary {
 }
 
 #[derive(Debug, Clone)]
-pub struct Variable {
-    pub name: Token,
+pub struct Variable<'src> {
+    pub name: Token<'src>,
 }
-impl Variable {
-    pub fn new(name: Token) -> Self {
+impl<'src> Variable<'src> {
+    pub fn new(name: Token<'src>) -> Self {
         Variable { name }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Assign {
-    pub name: Token,
-    pub value: Box<Expr>,
+pub struct Assign<'src> {
+    pub name: Token<'src>,
+    pub value: Box<Expr<'src>>,
 }
-impl Assign {
-    pub fn new(name: Token, value: Box<Expr>) -> Self {
+impl<'src> Assign<'src> {
+    pub fn new(name: Token<'src>, value: Box<Expr<'src>>) -> Self {
         Assign { name, value }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Logical {
-    pub left: Box<Expr>,
-    pub operator: Token,
-    pub right: Box<Expr>,
+pub struct Logical<'src> {
+    pub left: Box<Expr<'src>>,
+    pub operator: Token<'src>,
+    pub right: Box<Expr<'src>>,
 }
-impl Logical {
-    pub fn new(left: Box<Expr>, operator: Token, right: Box<Expr>) -> Self {
+impl<'src> Logical<'src> {
+    pub fn new(left: Box<Expr<'src>>, operator: Token<'src>, right: Box<Expr<'src>>) -> Self {
         Logical {
             left,
             operator,
@@ -158,13 +158,13 @@ impl Logical {
 }
 
 #[derive(Debug, Clone)]
-pub struct Call {
-    pub callee: Box<Expr>,
-    pub paren: Token,
-    pub arguments: Vec<Expr>,
+pub struct Call<'src> {
+    pub callee: Box<Expr<'src>>,
+    pub paren: Token<'src>,
+    pub arguments: Vec<Expr<'src>>,
 }
-impl Call {
-    pub fn new(callee: Box<Expr>, paren: Token, arguments: Vec<Expr>) -> Self {
+impl<'src> Call<'src> {
+    pub fn new(callee: Box<Expr<'src>>, paren: Token<'src>, arguments: Vec<Expr<'src>>) -> Self {
         Call {
             callee,
             paren,
@@ -174,40 +174,40 @@ impl Call {
 }
 
 #[derive(Debug, Clone)]
-pub struct Closure {
-    pub params: Vec<Token>,
-    pub body: Vec<Stmt>,
+pub struct Closure<'src> {
+    pub params: Vec<Token<'src>>,
+    pub body: Vec<Stmt<'src>>,
 }
-impl Closure {
-    pub fn new(params: Vec<Token>, body: Vec<Stmt>) -> Self {
+impl<'src> Closure<'src> {
+    pub fn new(params: Vec<Token<'src>>, body: Vec<Stmt<'src>>) -> Self {
         Closure { params, body }
     }
 }
-impl PartialEq for Closure {
+impl<'src> PartialEq for Closure<'src> {
     fn eq(&self, _: &Self) -> bool {
         false
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Get {
-    pub object: Box<Expr>,
-    pub name: Token,
+pub struct Get<'src> {
+    pub object: Box<Expr<'src>>,
+    pub name: Token<'src>,
 }
-impl Get {
-    pub fn new(object: Box<Expr>, name: Token) -> Self {
+impl<'src> Get<'src> {
+    pub fn new(object: Box<Expr<'src>>, name: Token<'src>) -> Self {
         Get { object, name }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Set {
-    pub object: Box<Expr>,
-    pub name: Token,
-    pub value: Box<Expr>,
+pub struct Set<'src> {
+    pub object: Box<Expr<'src>>,
+    pub name: Token<'src>,
+    pub value: Box<Expr<'src>>,
 }
-impl Set {
-    pub fn new(object: Box<Expr>, name: Token, value: Box<Expr>) -> Self {
+impl<'src> Set<'src> {
+    pub fn new(object: Box<Expr<'src>>, name: Token<'src>, value: Box<Expr<'src>>) -> Self {
         Set {
             object,
             name,
@@ -217,22 +217,22 @@ impl Set {
 }
 
 #[derive(Debug, Clone)]
-pub struct This {
-    pub keyword: Token,
+pub struct This<'src> {
+    pub keyword: Token<'src>,
 }
-impl This {
-    pub fn new(keyword: Token) -> Self {
+impl<'src> This<'src> {
+    pub fn new(keyword: Token<'src>) -> Self {
         This { keyword }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Super {
-    pub keyword: Token,
-    pub method: Token,
+pub struct Super<'src> {
+    pub keyword: Token<'src>,
+    pub method: Token<'src>,
 }
-impl Super {
-    pub fn new(keyword: Token, method: Token) -> Self {
+impl<'src> Super<'src> {
+    pub fn new(keyword: Token<'src>, method: Token<'src>) -> Self {
         Super { keyword, method }
     }
 }

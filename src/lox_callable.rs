@@ -5,13 +5,13 @@ use crate::{
 use std::{fmt, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LoxCallable {
-    Function(Rc<LoxFunction>),
-    NativeFun(Rc<NativeFunction>),
-    Class(Rc<LoxClass>),
+pub enum LoxCallable<'src> {
+    Function(Rc<LoxFunction<'src>>),
+    NativeFun(Rc<NativeFunction<'src>>),
+    Class(Rc<LoxClass<'src>>),
 }
 
-impl LoxCallable {
+impl<'src> LoxCallable<'src> {
     pub fn arity(&self) -> usize {
         match self {
             LoxCallable::Function(function) => function.arity(),
@@ -22,9 +22,9 @@ impl LoxCallable {
 
     pub fn call(
         &self,
-        interpreter: &mut Interpreter,
-        arguments: Vec<LoxObject>,
-    ) -> Result<LoxObject, LoxException> {
+        interpreter: &mut Interpreter<'src>,
+        arguments: Vec<LoxObject<'src>>,
+    ) -> Result<LoxObject<'src>, LoxException<'src>> {
         match self {
             LoxCallable::Function(function) => function.call(interpreter, arguments),
             LoxCallable::NativeFun(native_fun) => native_fun.call(interpreter, arguments),
@@ -33,7 +33,7 @@ impl LoxCallable {
     }
 }
 
-impl fmt::Display for LoxCallable {
+impl<'src> fmt::Display for LoxCallable<'src> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LoxCallable::Function(function) => write!(f, "{function}"),

@@ -2,12 +2,12 @@ use crate::lox_object::LoxObject;
 use std::{error::Error, fmt};
 
 #[derive(Debug, Clone)]
-pub enum LoxException {
+pub enum LoxException<'src> {
     RuntimeError(RuntimeError),
-    Return(LoxObject),
+    Return(LoxObject<'src>),
 }
 
-impl fmt::Display for LoxException {
+impl fmt::Display for LoxException<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LoxException::RuntimeError(error) => write!(f, "{error}"),
